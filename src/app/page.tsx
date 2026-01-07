@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
+import UserMenu from '@/components/ui/UserMenu';
 
 export default function LandingPage() {
   const [isHovered, setIsHovered] = useState(false);
@@ -32,20 +33,7 @@ export default function LandingPage() {
             <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
               🏈 Win The Grid
             </h1>
-            <div className="flex items-center gap-3">
-              <Link
-                href="/auth/signin"
-                className="text-gray-700 hover:text-gray-900 font-medium transition-colors duration-200"
-              >
-                Sign In
-              </Link>
-              <Link
-                href="/auth/signup"
-                className="py-2 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-md font-medium transition-colors duration-200"
-              >
-                Sign Up
-              </Link>
-            </div>
+            <UserMenu />
           </div>
         </div>
       </header>

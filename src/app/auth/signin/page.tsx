@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { LocalStorageProvider } from '@/lib/storage/localStorage';
+import { supabase } from '@/lib/supabase';
 
 export default function SigninPage() {
   const router = useRouter();
@@ -52,16 +53,15 @@ export default function SigninPage() {
     setIsSubmitting(true);
     
     try {
-      // TODO: Implement actual Supabase authentication
-      // const { data, error } = await supabase.auth.signInWithPassword({
-      //   email: formData.email,
-      //   password: formData.password
-      // });
-      //
-      // if (error) throw error;
+      // Implement actual Supabase authentication
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: formData.email,
+        password: formData.password
+      });
 
-      // Simulate successful signin
-      console.log('Signing in:', formData.email);
+      if (error) throw error;
+
+      console.log('Sign in successful:', data.user?.email);
       
       // Check if user has local data that needs migration
       if (hasLocalData) {

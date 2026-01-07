@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { LocalStorageProvider } from '@/lib/storage/localStorage';
+import { supabase } from '@/lib/supabase';
 import MigrationPreview from './MigrationPreview';
 import MigrationFlow from './MigrationFlow';
 
@@ -56,22 +57,44 @@ export default function SignupWithMigration({ onComplete }: SignupWithMigrationP
     try {
       setUserInfo(formData);
 
-      // TODO: Implement actual Supabase authentication
-      // const { data, error } = await supabase.auth.signUp({
-      //   email: formData.email,
-      //   password: formData.password,
-      //   options: {
-      //     data: {
-      //       name: formData.name,
-      //     }
-      //   }
-      // });
-      //
-      // if (error) throw error;
+      console.log('Attempting signup for:', formData.email);
+
+      // Implement actual Supabase authentication
+      const { data, error } = await supabase.auth.signUp({
+        email: formData.email,
+        password: formData.password,
+        options: {
+          data: {
+            name: formData.name,
+            full_name: formData.name, // Add full_name for profile creation
+          }
+        }
+      });
+
+      if (error) {
+        console.error('Supabase signup error:', {
+          message: error.message,
+          status: error.status,
+          details: error
+        });
+        
+        // Provide user-friendly error messages
+        let userMessage = error.message;
+        if (error.message.includes('Database error')) {
+          userMessage = 'Database setup issue. Please check the setup instructions.';
+        } else if (error.message.includes('User already registered')) {
+          userMessage = 'An account with this email already exists. Try signing in instead.';
+        } else if (error.message.includes('Invalid email')) {
+          userMessage = 'Please enter a valid email address.';
+        }
+        
+        throw new Error(userMessage);
+      }
+
+      console.log('Signup successful:', data);
       
-      // Simulate successful signup
-      const simulatedUserId = 'user-' + Date.now();
-      setUserId(simulatedUserId);
+      // Use real user ID from Supabase
+      setUserId(data.user?.id || null);
 
       if (hasLocalData && !skipMigration) {
         setCurrentStep('migration');
@@ -85,7 +108,8 @@ export default function SignupWithMigration({ onComplete }: SignupWithMigrationP
 
     } catch (error) {
       console.error('Signup failed:', error);
-      // Handle signup error
+      // Handle signup error - show error message to user
+      throw error; // Let the form handle the error
     }
   };
 
@@ -241,7 +265,8 @@ function SignupForm({
       });
     } catch (error) {
       console.error('Signup error:', error);
-      setErrors({ submit: 'Failed to create account. Please try again.' });
+      const errorMessage = error instanceof Error ? error.message : 'Failed to create account. Please try again.';
+      setErrors({ submit: errorMessage });
     } finally {
       setIsSubmitting(false);
     }

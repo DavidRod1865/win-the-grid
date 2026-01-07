@@ -1,83 +1,92 @@
 import { GridState, UserSubscription, PaymentTransaction } from '@/types';
 import { StorageProvider, FeatureFlags, StorageType } from './types';
+import { supabase } from '../supabase';
+import type { SupabaseClient } from '@supabase/supabase-js';
 
 export class SupabaseProvider implements StorageProvider {
-  // TODO: Initialize with Supabase client once API keys are added
-  // private supabase: SupabaseClient;
+  private supabase: SupabaseClient;
   
   constructor() {
-    // TODO: Initialize Supabase client
-    // this.supabase = createClientComponentClient();
-    console.warn('SupabaseProvider: API keys not configured yet');
+    this.supabase = supabase;
+    console.log('SupabaseProvider: Initialized with Supabase client');
   }
 
   /**
    * Migrate localStorage grid to Supabase (called during signup)
    */
   async migrateLocalStorageGrid(gridState: GridState): Promise<string> {
-    // TODO: Implement migration once client is configured
-    throw new Error('Supabase integration not yet implemented. API keys needed.');
+    const { MigrationTransformer } = await import('./migration');
     
-    // Implementation will be:
-    // const { MigrationTransformer } = await import('./migration');
-    // 
-    // // Transform and validate data
-    // const supabaseData = MigrationTransformer.transformGridForSupabase(gridState);
-    // const validation = MigrationTransformer.validateMigrationData(supabaseData);
-    // 
-    // if (!validation.isValid) {
-    //   throw new Error(`Migration validation failed: ${validation.errors.join(', ')}`);
-    // }
-    // 
-    // // Create new grid with migrated data
-    // const { data, error } = await this.supabase
-    //   .rpc('create_grid_free', {
-    //     p_title: supabaseData.title,
-    //     p_sport_id: supabaseData.sport_id,
-    //     p_game_type_id: supabaseData.game_type_id,
-    //     p_price_per_box: supabaseData.price_per_box,
-    //     p_payout_template: supabaseData.payout_template,
-    //     p_payout_rules: supabaseData.payout_rules,
-    //     p_teams: supabaseData.teams
-    //   });
-    // 
-    // if (error) throw error;
-    // 
-    // const gridId = data[0].grid_id;
-    // 
-    // // Update with all migrated data
-    // const { error: updateError } = await this.supabase
-    //   .from('grids')
-    //   .update({
-    //     participants: supabaseData.participants,
-    //     row_numbers: supabaseData.row_numbers,
-    //     col_numbers: supabaseData.col_numbers,
-    //     numbers_generated: supabaseData.numbers_generated,
-    //     winners: supabaseData.winners,
-    //     current_scores: supabaseData.current_scores,
-    //     side_pools: supabaseData.side_pools,
-    //     state: supabaseData.state
-    //   })
-    //   .eq('id', gridId);
-    // 
-    // if (updateError) throw updateError;
-    // 
-    // // Log successful migration
-    // await this.supabase
-    //   .from('grid_activity_log')
-    //   .insert({
-    //     grid_id: gridId,
-    //     user_id: auth.uid(),
-    //     activity_type: 'grid_migrated',
-    //     activity_data: {
-    //       source: 'localStorage',
-    //       participant_count: Object.keys(supabaseData.participants).length,
-    //       had_numbers: supabaseData.numbers_generated,
-    //       had_winners: supabaseData.winners.length > 0
-    //     }
-    //   });
-    // 
-    // return gridId;
+    // Transform and validate data
+    const supabaseData = MigrationTransformer.transformGridForSupabase(gridState);
+    const validation = MigrationTransformer.validateMigrationData(supabaseData);
+    
+    if (!validation.isValid) {
+      throw new Error(`Migration validation failed: ${validation.errors.join(', ')}`);
+    }
+
+    // Get current user
+    const { data: { user }, error: authError } = await this.supabase.auth.getUser();
+    if (authError || !user) {
+      throw new Error('User must be authenticated to migrate data');
+    }
+    
+    // Create new grid record directly (since RPC functions might not exist yet)
+    const { data: gridData, error: createError } = await this.supabase
+      .from('grids')
+      .insert({
+        title: supabaseData.title,
+        created_by: user.id,
+        sport_id: supabaseData.sport_id,
+        game_type_id: supabaseData.game_type_id,
+        price_per_box: supabaseData.price_per_box,
+        payout_template: supabaseData.payout_template,
+        payout_rules: supabaseData.payout_rules,
+        teams: supabaseData.teams,
+        participants: supabaseData.participants,
+        row_numbers: supabaseData.row_numbers,
+        col_numbers: supabaseData.col_numbers,
+        numbers_generated: supabaseData.numbers_generated,
+        winners: supabaseData.winners,
+        current_scores: supabaseData.current_scores,
+        side_pools: supabaseData.side_pools,
+        state: supabaseData.state,
+        is_premium: supabaseData.is_premium,
+        payment_type: supabaseData.payment_type,
+        is_public: false,
+        live_scoring_enabled: false
+      })
+      .select('id')
+      .single();
+    
+    if (createError) {
+      console.error('Migration error:', createError);
+      throw new Error(`Failed to create grid: ${createError.message}`);
+    }
+
+    const gridId = gridData.id;
+    
+    // Log successful migration
+    try {
+      await this.supabase
+        .from('grid_activity_log')
+        .insert({
+          grid_id: gridId,
+          user_id: user.id,
+          activity_type: 'grid_migrated',
+          activity_data: {
+            source: 'localStorage',
+            participant_count: Object.keys(supabaseData.participants).length,
+            had_numbers: supabaseData.numbers_generated,
+            had_winners: supabaseData.winners.length > 0
+          }
+        });
+    } catch (logError) {
+      // Log migration activity is not critical - don't fail the migration
+      console.warn('Failed to log migration:', logError);
+    }
+    
+    return gridId;
   }
 
   async saveGrid(gridState: GridState): Promise<string> {
@@ -288,9 +297,8 @@ export class SupabaseProvider implements StorageProvider {
   // }
 
   static isConfigured(): boolean {
-    // TODO: Check if Supabase environment variables are set
-    // return !!(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
-    return false;
+    // Check if Supabase environment variables are set
+    return !!(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY);
   }
 
   /**
