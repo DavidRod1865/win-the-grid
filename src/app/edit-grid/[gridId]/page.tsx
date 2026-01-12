@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, use } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { GridState, GameState, GameScore, Winner, ParticipantPayment, UserSubscription } from '@/types';
@@ -11,17 +11,21 @@ import { exportToExcel } from '@/lib/excel-export';
 import { generatePDF } from '@/lib/pdf-export';
 import { GameDayManager } from '@/lib/game-day';
 import { useAuth } from '@/contexts/AuthContext';
+import UserMenu from '@/components/ui/UserMenu';
 
-export default function GridPage() {
+interface EditGridPageProps {
+  params: Promise<{
+    gridId: string;
+  }>;
+}
+
+export default function EditGridPage({ params }: EditGridPageProps) {
   const router = useRouter();
   const { user, loading } = useAuth();
+  const { gridId } = use(params);
 
-  // Redirect authenticated users to their grids page
-  useEffect(() => {
-    if (!loading && user) {
-      router.push('/grids');
-    }
-  }, [user, loading, router]);
+  // Grid loading and initialization state
+  const [isInitializing, setIsInitializing] = useState(true);
   const [gridState, setGridState] = useState<GridState>({
     boxes: Array.from({ length: 100 }, (_, i) => ({
       id: `box-${i}`,
@@ -73,7 +77,9 @@ export default function GridPage() {
       }
     ],
     wentToOvertime: false,
-    sidePoolsEnabled: false
+    sidePoolsEnabled: false,
+    id: gridId,
+    participantPayments: []
   });
 
   const [editingBox, setEditingBox] = useState<string | null>(null);
@@ -116,10 +122,17 @@ export default function GridPage() {
   const [userGrids, setUserGrids] = useState<GridState[]>([]);
   const [showGridsDropdown, setShowGridsDropdown] = useState(false);
 
-  // Grid page is for anonymous users only - always use localStorage
+  // Share functionality state
+  const [shareModalOpen, setShareModalOpen] = useState(false);
+  const [shareUrl, setShareUrl] = useState('');
+  const [shareCode, setShareCode] = useState('');
+  const [sharingInProgress, setSharingInProgress] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+
+  // Dynamic grid loading with Supabase for authenticated users
   
   // Get available features based on subscription and grid
-  const features = getFeatures(userSubscription || undefined, gridState.id);
+  const features = getFeatures(userSubscription || undefined, gridState?.id || gridId);
 
   // Helper function to handle premium feature access
   const handlePremiumFeature = (action: () => void, featureName: string) => {
@@ -134,85 +147,176 @@ export default function GridPage() {
     }
   };
 
-  useEffect(() => {
-    // TODO: Load user subscription from auth provider
-    // For now, simulate free tier (no account)
-    setUserSubscription({
-      tier: 'free',
-      paymentStatus: 'free'
-    });
-    
-    // Helper function to load a grid state
-    const loadGridState = (savedState: GridState) => {
-      setGridState(prev => ({ 
-        ...prev, 
-        ...savedState,
-        title: savedState.title || 'Super Bowl LX',
-        selectedTemplate: savedState.selectedTemplate || defaultPayoutTemplates[0].name,
-        payoutRules: savedState.payoutRules || defaultPayoutTemplates[0].rules
-      }));
-      
-      // Initialize custom percentages if Custom template is selected
-      if (savedState.selectedTemplate === 'Custom' && savedState.payoutRules) {
-        const customPercs: { [key: string]: number } = {};
-        savedState.payoutRules.forEach((rule: { quarter: string; percentage: number }) => {
-          customPercs[rule.quarter] = rule.percentage;
-        });
-        setCustomPercentages({
-          '1st Quarter': customPercs['1st Quarter'] || 25,
-          'Halftime': customPercs['Halftime'] || 25,
-          '3rd Quarter': customPercs['3rd Quarter'] || 25,
-          'Final Score': customPercs['Final Score'] || 25
-        });
-      }
-    };
-
-    // Load grid state using storage provider
-    const loadInitialState = async () => {
-      try {
-        // Check URL parameters first
-        const urlParams = new URLSearchParams(window.location.search);
-        const gridIdFromUrl = urlParams.get('gridId');
-        
-        // If no gridId in URL, this is "Create New Grid" - keep empty state
-        if (!gridIdFromUrl) {
-          console.log('No gridId in URL - creating new grid');
-          return;
-        }
-        
-        // Grid page is for anonymous users only - use localStorage
+  // Helper function to save grid to Supabase (authenticated users) or localStorage (anonymous)
+  const saveGridState = async (state: GridState | null) => {
+    if (!state) return;
+    try {
+      if (user && gridId) {
+        // Authenticated user - save to Supabase
+        const supabaseProvider = new SupabaseProvider();
+        await supabaseProvider.saveGrid(state);
+        console.log('Saved grid to Supabase:', state.id);
+      } else {
+        // Anonymous user - fall back to localStorage
         const provider = StorageFactory.getInstance();
+        await provider.saveGrid(state);
+        console.log('Saved grid to localStorage');
+      }
+    } catch (error) {
+      console.error('Failed to save grid state:', error);
+      // Could add user notification here
+    }
+  };
+
+  // Initialize grid data - load from Supabase if available, otherwise create empty grid
+  useEffect(() => {
+    const initializeGrid = async () => {
+      try {
+        setIsInitializing(true);
         
-        // Try to load the specific grid by ID
-        const savedState = await provider.loadGrid(gridIdFromUrl);
-        
-        if (savedState) {
-          console.log('Loaded grid:', savedState.id, savedState.title);
-          loadGridState(savedState);
-        } else {
-          console.warn('Grid not found:', gridIdFromUrl);
-          // Grid not found, but keep the empty state for new grid creation
-        }
-        
-        // Load user grids list for dropdown (if provider supports it)
-        if (provider.loadUserGrids) {
+        // Create default empty grid state
+        const createEmptyGrid = (): GridState => ({
+          boxes: Array.from({ length: 100 }, (_, i) => ({
+            id: `box-${i}`,
+            name: '',
+            row: Math.floor(i / 10),
+            col: i % 10
+          })),
+          rowNumbers: [],
+          colNumbers: [],
+          numbersGenerated: false,
+          pricePerBox: 10,
+          payoutRules: defaultPayoutTemplates[0].rules,
+          selectedTemplate: defaultPayoutTemplates[0].name,
+          winners: {},
+          title: 'Super Bowl LX',
+          gameState: 'draft',
+          currentScores: [],
+          gameWinners: [],
+          homeTeamName: 'Home Team',
+          awayTeamName: 'Away Team',
+          sidePools: [
+            {
+              id: 'reverse-final',
+              name: 'Reverse Final Score',
+              enabled: false,
+              percentage: 0,
+              description: 'Use the last digit of each team\'s final score and reverse them. If 14-10 and 4-0 wins then 0-4 also wins.'
+            },
+            {
+              id: 'overtime-jackpot',
+              name: 'Overtime Jackpot',
+              enabled: false,
+              percentage: 0,
+              description: 'Pays only if the game goes to overtime. If not overtime, then final score keeps overtime percentage.'
+            },
+            {
+              id: 'winning-team-bonus',
+              name: 'Winning Team Bonus',
+              enabled: false,
+              percentage: 0,
+              description: 'Anyone who has a square matching the winning team\'s last digit qualifies. Two winners split percentage.'
+            },
+            {
+              id: 'reverse-halftime',
+              name: 'Reverse Halftime Score',
+              enabled: false,
+              percentage: 0,
+              description: 'Reverse digits applied only at halftime. Adds variety without confusing the whole game.'
+            }
+          ],
+          wentToOvertime: false,
+          sidePoolsEnabled: false,
+          id: gridId,
+          participantPayments: []
+        });
+
+        // Try to load existing grid from Supabase
+        if (user && gridId) {
           try {
-            const allGrids = await provider.loadUserGrids();
-            setUserGrids(allGrids);
+            const supabaseProvider = new SupabaseProvider();
+            const existingGrid = await supabaseProvider.loadGrid(gridId);
+            
+            if (existingGrid) {
+              console.log('Loaded existing grid from Supabase:', existingGrid.title);
+              setGridState(existingGrid);
+              
+              // Initialize custom percentages if Custom template is selected
+              if (existingGrid.selectedTemplate === 'Custom' && existingGrid.payoutRules) {
+                const customPercs: { [key: string]: number } = {};
+                existingGrid.payoutRules.forEach((rule) => {
+                  customPercs[rule.quarter] = rule.percentage;
+                });
+                setCustomPercentages({
+                  '1st Quarter': customPercs['1st Quarter'] || 25,
+                  'Halftime': customPercs['Halftime'] || 25,
+                  '3rd Quarter': customPercs['3rd Quarter'] || 25,
+                  'Final Score': customPercs['Final Score'] || 25
+                });
+              }
+              
+              // Load user grids for any dropdowns
+              const userGrids = await supabaseProvider.loadUserGrids();
+              setUserGrids(userGrids);
+            } else {
+              console.log('Grid not found, creating empty grid with ID:', gridId);
+              setGridState(createEmptyGrid());
+            }
           } catch (error) {
-            console.error('Failed to load user grids list:', error);
+            console.error('Error loading grid from Supabase:', error);
+            setGridState(createEmptyGrid());
           }
+        } else {
+          // No user auth or gridId, create empty grid
+          console.log('Creating empty grid (no auth or gridId)');
+          setGridState(createEmptyGrid());
         }
+        
+        // Set user subscription
+        setUserSubscription({
+          tier: user ? 'paid' : 'free',
+          paymentStatus: user ? 'season-pass' : 'free'
+        });
         
       } catch (error) {
-        console.error('Failed to load grid state:', error);
-        // Keep empty state on error for new grid creation
+        console.error('Failed to initialize grid:', error);
+        // Fallback to empty grid
+        setGridState({
+          boxes: Array.from({ length: 100 }, (_, i) => ({
+            id: `box-${i}`,
+            name: '',
+            row: Math.floor(i / 10),
+            col: i % 10
+          })),
+          rowNumbers: [],
+          colNumbers: [],
+          numbersGenerated: false,
+          pricePerBox: 10,
+          payoutRules: defaultPayoutTemplates[0].rules,
+          selectedTemplate: defaultPayoutTemplates[0].name,
+          winners: {},
+          title: 'Super Bowl LX',
+          gameState: 'draft',
+          currentScores: [],
+          gameWinners: [],
+          homeTeamName: 'Home Team',
+          awayTeamName: 'Away Team',
+          sidePools: [],
+          wentToOvertime: false,
+          sidePoolsEnabled: false,
+          id: gridId,
+          participantPayments: []
+        });
+      } finally {
+        setIsInitializing(false);
       }
     };
 
-    // Load grid state for anonymous users
-    loadInitialState();
-  }, []);
+    // Only initialize when we have auth status resolved
+    if (!loading) {
+      initializeGrid();
+    }
+  }, [user, loading, gridId]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -230,79 +334,48 @@ export default function GridPage() {
   }, [showGridsDropdown]);
 
   // Function to switch between grids
-  const handleSwitchGrid = async (gridId: string) => {
+  const handleSwitchGrid = async (targetGridId: string) => {
     try {
-      const provider = StorageFactory.getInstance();
       // Save current grid before switching
-      await provider.saveGrid(gridState);
-      
-      const grid = await provider.loadGrid(gridId);
-      if (grid) {
-        // Load the new grid
-        setGridState(prev => ({ 
-          ...prev, 
-          ...grid,
-          title: grid.title || 'Super Bowl LX',
-          selectedTemplate: grid.selectedTemplate || defaultPayoutTemplates[0].name,
-          payoutRules: grid.payoutRules || defaultPayoutTemplates[0].rules
-        }));
-        
-        // Initialize custom percentages if Custom template is selected
-        if (grid.selectedTemplate === 'Custom' && grid.payoutRules) {
-          const customPercs: { [key: string]: number } = {};
-          grid.payoutRules.forEach((rule: { quarter: string; percentage: number }) => {
-            customPercs[rule.quarter] = rule.percentage;
-          });
-          setCustomPercentages({
-            '1st Quarter': customPercs['1st Quarter'] || 25,
-            'Halftime': customPercs['Halftime'] || 25,
-            '3rd Quarter': customPercs['3rd Quarter'] || 25,
-            'Final Score': customPercs['Final Score'] || 25
-          });
-        }
-        
-        // Update URL without reload
-        const url = new URL(window.location.href);
-        url.searchParams.set('gridId', gridId);
-        window.history.pushState({}, '', url.toString());
-        
-        setShowGridsDropdown(false);
-      }
+      await saveGridState(gridState);
+
+      // Navigate to the new grid URL
+      router.push(`/edit-grid/${targetGridId}`);
+
+      setShowGridsDropdown(false);
     } catch (error) {
       console.error('Failed to switch grid:', error);
     }
   };
 
-  const filledBoxesCount = gridState.boxes.filter(box => box.name.trim() !== '').length;
-  const canGenerateNumbers = filledBoxesCount === 100;
-  const selectedTemplate = defaultPayoutTemplates.find(t => t.name === gridState.selectedTemplate);
-  const isNoRepeatTemplate = selectedTemplate?.specialLogic === 'no-repeat';
-  const calculatedPayouts = isNoRepeatTemplate 
-    ? calculatePayoutsWithNoRepeat(gridState.pricePerBox, gridState.payoutRules, gridState.winners)
-    : calculatePayouts(gridState.pricePerBox, gridState.payoutRules);
-  const totalPot = gridState.pricePerBox * 100;
-  
-  // Calculate side pool totals
-  const enabledSidePools = (gridState.sidePools || []).filter(p => p.enabled && p.percentage > 0);
-  const totalSidePoolPercentage = enabledSidePools.reduce((sum, pool) => sum + pool.percentage, 0);
-  const totalSidePoolAmount = (totalPot * totalSidePoolPercentage) / 100;
-  const remainingPotForMainPayouts = totalPot - totalSidePoolAmount;
-  
-  // Recalculate payouts based on remaining pot after side pools
-  // Also calculate adjusted percentages (as percentage of total pot)
-  const calculatedPayoutsWithSidePools = calculatedPayouts.map(payout => {
-    const rule = gridState.payoutRules.find(r => r.quarter === payout.quarter);
-    if (rule) {
-      const percentage = rule.percentage;
-      const amount = (remainingPotForMainPayouts * percentage) / 100;
-      // Calculate adjusted percentage as percentage of total pot
-      const adjustedPercentage = totalPot > 0 ? (amount / totalPot) * 100 : percentage;
-      return { ...payout, amount, adjustedPercentage };
+  // Function to share grid
+  const handleShareGrid = async () => {
+    if (!user) {
+      // Redirect to sign up
+      router.push('/auth/signup');
+      return;
     }
-    return payout;
-  });
+
+    try {
+      setSharingInProgress(true);
+
+      // Use SupabaseProvider directly for authenticated users
+      const supabaseProvider = new SupabaseProvider();
+      const { joinCode, shareUrl } = await supabaseProvider.shareGrid(gridState.id!);
+
+      setShareCode(joinCode);
+      setShareUrl(shareUrl);
+      setShareModalOpen(true);
+    } catch (error) {
+      console.error('Failed to share grid:', error);
+      alert('Failed to generate share link. Please try again.');
+    } finally {
+      setSharingInProgress(false);
+    }
+  };
 
   const handleBoxClick = (boxId: string) => {
+    if (!gridState) return;
     const box = gridState.boxes.find(b => b.id === boxId);
     if (box) {
       setEditingBox(boxId);
@@ -347,19 +420,17 @@ export default function GridPage() {
       newState.participantPayments = updatedPayments;
       setGridState(newState);
       
-      try {
-        await StorageFactory.getInstance().saveGrid(newState);
-      } catch (error) {
-        console.error('Failed to save grid state:', error);
-      }
+      await saveGridState(newState);
       
       setEditingBox(null);
       setTempName('');
     }
   };
 
-  // Get participants with their boxes and totals
+  // Get participants function (will be called after loading check)
   const getParticipants = () => {
+    if (!gridState) return [];
+    
     const participantMap: { [name: string]: { boxes: number[], total: number } } = {};
     
     gridState.boxes.forEach((box, index) => {
@@ -383,39 +454,48 @@ export default function GridPage() {
     return participants.sort((a, b) => a.name.localeCompare(b.name));
   };
 
-  // Calculate total money collected
-  const totalMoneyCollected = getParticipants()
-    .filter(p => p.payment.paid)
-    .reduce((sum, p) => sum + p.total, 0);
-  const moneyCollectedPercentage = totalPot > 0 ? (totalMoneyCollected / totalPot) * 100 : 0;
+  // Helper function to get local date in YYYY-MM-DD format
+  const getLocalDateString = () => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  // Helper function to format YYYY-MM-DD date string for display
+  const formatDateForDisplay = (dateStr: string) => {
+    const [year, month, day] = dateStr.split('-');
+    return `${parseInt(month)}/${parseInt(day)}/${year}`;
+  };
 
   const handleParticipantPaymentUpdate = async (participantName: string, paid: boolean, paidDate?: string) => {
     const existingPayments = gridState.participantPayments || [];
     const paymentIndex = existingPayments.findIndex(p => p.name === participantName);
-    
+
     let updatedPayments: ParticipantPayment[];
     if (paymentIndex >= 0) {
-      updatedPayments = existingPayments.map((p, idx) => 
-        idx === paymentIndex 
-          ? { ...p, paid, paidDate: paid ? (paidDate || new Date().toISOString().split('T')[0]) : undefined }
+      updatedPayments = existingPayments.map((p, idx) =>
+        idx === paymentIndex
+          ? { ...p, paid, paidDate: paid ? (paidDate || getLocalDateString()) : undefined }
           : p
       );
     } else {
       updatedPayments = [
         ...existingPayments,
-        { name: participantName, paid, paidDate: paid ? (paidDate || new Date().toISOString().split('T')[0]) : undefined }
+        { name: participantName, paid, paidDate: paid ? (paidDate || getLocalDateString()) : undefined }
       ];
     }
 
     const newState = { ...gridState, participantPayments: updatedPayments };
     setGridState(newState);
-    
+
     try {
-      await StorageFactory.getInstance().saveGrid(newState);
+      await saveGridState(newState);
     } catch (error) {
       console.error('Failed to save grid state:', error);
     }
-    
+
     setEditingParticipant(null);
     setTempPaidStatus(false);
     setTempPaidDate('');
@@ -460,11 +540,7 @@ export default function GridPage() {
       };
       setGridState(newState);
       
-      try {
-        await StorageFactory.getInstance().saveGrid(newState);
-      } catch (error) {
-        console.error('Failed to save grid state:', error);
-      }
+      await saveGridState(newState);
     } else {
     const template = defaultPayoutTemplates.find(t => t.name === templateName);
     if (template) {
@@ -474,12 +550,8 @@ export default function GridPage() {
         payoutRules: template.rules
         };
         setGridState(newState);
-        
-        try {
-          await StorageFactory.getInstance().saveGrid(newState);
-        } catch (error) {
-          console.error('Failed to save grid state:', error);
-        }
+
+        await saveGridState(newState);
       }
     }
   };
@@ -505,23 +577,15 @@ export default function GridPage() {
       };
       setGridState(newState);
       
-      try {
-        await StorageFactory.getInstance().saveGrid(newState);
-      } catch (error) {
-        console.error('Failed to save grid state:', error);
-      }
+      await saveGridState(newState);
     }
   };
 
   const handlePriceChange = async (price: number) => {
     const newState = { ...gridState, pricePerBox: price > 0 ? price : 1 };
     setGridState(newState);
-    
-    try {
-      await StorageFactory.getInstance().saveGrid(newState);
-    } catch (error) {
-      console.error('Failed to save grid state:', error);
-    }
+
+    await saveGridState(newState);
   };
 
   const handleSidePoolToggle = async (poolId: string, enabled: boolean) => {
@@ -530,12 +594,8 @@ export default function GridPage() {
     ) || [];
     const newState = { ...gridState, sidePools: updatedSidePools };
     setGridState(newState);
-    
-    try {
-      await StorageFactory.getInstance().saveGrid(newState);
-    } catch (error) {
-      console.error('Failed to save grid state:', error);
-    }
+
+    await saveGridState(newState);
   };
 
   const handleSidePoolPercentageChange = async (poolId: string, percentage: number) => {
@@ -544,12 +604,8 @@ export default function GridPage() {
     ) || [];
     const newState = { ...gridState, sidePools: updatedSidePools };
     setGridState(newState);
-    
-    try {
-      await StorageFactory.getInstance().saveGrid(newState);
-    } catch (error) {
-      console.error('Failed to save grid state:', error);
-    }
+
+    await saveGridState(newState);
   };
 
   const handleAddCustomPool = async () => {
@@ -569,11 +625,7 @@ export default function GridPage() {
     const newState = { ...gridState, sidePools: updatedSidePools };
     setGridState(newState);
 
-    try {
-      await StorageFactory.getInstance().saveGrid(newState);
-    } catch (error) {
-      console.error('Failed to save grid state:', error);
-    }
+    await saveGridState(newState);
 
     // Reset form
     setCustomPoolName('');
@@ -591,12 +643,52 @@ export default function GridPage() {
     const updatedSidePools = (gridState.sidePools || []).filter(pool => pool.id !== poolId);
     const newState = { ...gridState, sidePools: updatedSidePools };
     setGridState(newState);
-    
-    try {
-      await StorageFactory.getInstance().saveGrid(newState);
-    } catch (error) {
-      console.error('Failed to save grid state:', error);
-    }
+
+    await saveGridState(newState);
+  };
+
+  const handleApplySampleSidePools = async (sampleType: 'popular' | 'balanced' | 'highstakes') => {
+    // Define sample configurations
+    const sampleConfigs = {
+      popular: [
+        { id: 'reverse-final', percentage: 5 },
+        { id: 'overtime-jackpot', percentage: 3 }
+      ],
+      balanced: [
+        { id: 'reverse-final', percentage: 5 },
+        { id: 'reverse-halftime', percentage: 5 }
+      ],
+      highstakes: [
+        { id: 'reverse-final', percentage: 10 },
+        { id: 'overtime-jackpot', percentage: 5 },
+        { id: 'winning-team-bonus', percentage: 5 }
+      ]
+    };
+
+    const selectedConfig = sampleConfigs[sampleType];
+
+    // Update the side pools with the selected configuration
+    const updatedSidePools = (gridState.sidePools || []).map(pool => {
+      const samplePool = selectedConfig.find(sp => sp.id === pool.id);
+      if (samplePool) {
+        return { ...pool, enabled: true, percentage: samplePool.percentage };
+      }
+      return { ...pool, enabled: false, percentage: pool.percentage || 0 };
+    });
+
+    const newState = { ...gridState, sidePools: updatedSidePools };
+    setGridState(newState);
+
+    await saveGridState(newState);
+
+    // Show toast notification
+    setToast('Sample side pools applied!');
+    setTimeout(() => setToast(null), 3000);
+  };
+
+  const handleCloseSettingsModal = async () => {
+    await saveGridState(gridState);
+    setShowSettingsModal(false);
   };
 
   const clearAllNames = async () => {
@@ -815,6 +907,55 @@ export default function GridPage() {
     return gridState.gameWinners?.map(winner => winner.boxIndex) || [];
   };
 
+  // Show loading screen while initializing or if no grid state
+  if (isInitializing || !gridState) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <h2 className="text-xl font-semibold text-gray-900 mb-2">Loading Grid</h2>
+          <p className="text-gray-600">
+            {user ? 'Loading your grid from the cloud...' : 'Preparing your grid...'}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // Calculate grid statistics and payouts (after loading check)
+  const totalPot = gridState.pricePerBox * 100;
+  const filledBoxesCount = gridState.boxes.filter(box => box.name.trim() !== '').length;
+  const canGenerateNumbers = filledBoxesCount === 100;
+  const selectedTemplate = defaultPayoutTemplates.find(t => t.name === gridState.selectedTemplate);
+  const isNoRepeatTemplate = selectedTemplate?.specialLogic === 'no-repeat';
+  const calculatedPayouts = isNoRepeatTemplate 
+    ? calculatePayoutsWithNoRepeat(gridState.pricePerBox, gridState.payoutRules, gridState.winners)
+    : calculatePayouts(gridState.pricePerBox, gridState.payoutRules);
+  
+  // Calculate total money collected
+  const totalMoneyCollected = getParticipants()
+    .filter(p => p.payment.paid)
+    .reduce((sum, p) => sum + p.total, 0);
+  const moneyCollectedPercentage = totalPot > 0 ? (totalMoneyCollected / totalPot) * 100 : 0;
+  
+  // Calculate side pool totals
+  const enabledSidePools = (gridState.sidePools || []).filter(p => p.enabled && p.percentage > 0);
+  const totalSidePoolPercentage = enabledSidePools.reduce((sum, pool) => sum + pool.percentage, 0);
+  const totalSidePoolAmount = (totalPot * totalSidePoolPercentage) / 100;
+  const remainingPotForMainPayouts = totalPot - totalSidePoolAmount;
+  
+  // Recalculate payouts based on remaining pot after side pools
+  const calculatedPayoutsWithSidePools = calculatedPayouts.map(payout => {
+    const rule = gridState.payoutRules.find(r => r.quarter === payout.quarter);
+    if (rule) {
+      const percentage = rule.percentage;
+      const amount = (remainingPotForMainPayouts * percentage) / 100;
+      const adjustedPercentage = totalPot > 0 ? (amount / totalPot) * 100 : percentage;
+      return { ...payout, amount, adjustedPercentage };
+    }
+    return payout;
+  });
+
   return (
     <div className="min-h-screen relative">
       {/* Background Image with Overlay */}
@@ -836,12 +977,17 @@ export default function GridPage() {
         <div className="max-w-7xl mx-auto px-4 py-5">
           <div className="flex justify-between items-center">
             <div className="flex items-center gap-4">
-              <Link
-                href="/"
-                className="text-blue-600 hover:text-blue-800 font-medium transition-colors duration-200 flex items-center gap-2"
-              >
-                Back to Home
-              </Link>
+              {user && (
+                <Link
+                  href="/grids"
+                  className="text-blue-600 hover:text-blue-800 font-medium transition-colors duration-200 flex items-center gap-2"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                  </svg>
+                  My Grids
+                </Link>
+              )}
               {userGrids.length > 1 && (
                 <div className="relative grids-dropdown-container">
                   <button
@@ -904,23 +1050,18 @@ export default function GridPage() {
                 <span className="text-base">☕</span>
                 Coffee
               </a>
-              <button 
-                onClick={() => {
-                  if (features.canShare) {
-                    // TODO: Implement sharing functionality
-                    console.log('Share grid clicked');
-                  } else {
-                    setShowUpgradeModal(true);
-                  }
-                }}
-                className={`py-2 px-4 rounded-md font-medium transition-all duration-200 hover:shadow-lg text-sm ${
-                  features.canShare 
-                    ? 'bg-purple-600 hover:bg-purple-700 text-white' 
+              {user && <UserMenu />}
+              <button
+                onClick={handleShareGrid}
+                disabled={sharingInProgress}
+                className={`py-2 px-4 rounded-md font-medium transition-all duration-200 hover:shadow-lg text-sm disabled:opacity-50 disabled:cursor-not-allowed ${
+                  features.canShare
+                    ? 'bg-purple-600 hover:bg-purple-700 text-white'
                     : 'bg-gray-400 hover:bg-gray-500 text-white'
                 }`}
                 aria-label={features.canShare ? "Share grid with others" : "Sign up to share grid"}
               >
-                {features.canShare ? 'Share Grid' : 'Share (Sign Up)'}
+                {sharingInProgress ? 'Sharing...' : user ? 'Share Grid' : 'Share (Sign Up)'}
               </button>
               <button 
                 onClick={() => {
@@ -1564,7 +1705,7 @@ export default function GridPage() {
                                               <div className="font-medium">Paid</div>
                                               {participant.payment.paidDate && (
                                                 <div className="text-gray-500">
-                                                  {new Date(participant.payment.paidDate).toLocaleDateString()}
+                                                  {formatDateForDisplay(participant.payment.paidDate)}
                             </div>
                                               )}
                           </div>
@@ -1736,11 +1877,11 @@ export default function GridPage() {
                                 }}
                                 className="w-full h-full text-center text-sm md:text-base lg:text-lg bg-yellow-100 border-none outline-none text-black focus:ring-2 focus:ring-yellow-400"
                                 autoFocus
-                                maxLength={8}
+                                maxLength={30}
                                 aria-label={`Editing box ${boxIndex + 1}`}
                               />
                             ) : (
-                              <span className="text-center leading-tight px-1 text-black">
+                              <span className="text-center leading-tight px-1 text-black wrap-break-word w-full">
                                 {box.name || '+'}
                               </span>
                             )}
@@ -1837,12 +1978,12 @@ export default function GridPage() {
 
       {/* Settings Modal */}
       {showSettingsModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setShowSettingsModal(false)}>
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={handleCloseSettingsModal}>
           <div className="bg-white rounded-lg shadow-xl p-6 max-w-md mx-4 w-full" onClick={(e) => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-xl font-semibold text-black">Settings</h3>
               <button
-                onClick={() => setShowSettingsModal(false)}
+                onClick={handleCloseSettingsModal}
                 className="text-gray-400 hover:text-gray-600 text-2xl leading-none"
                 aria-label="Close settings"
               >
@@ -1856,15 +1997,8 @@ export default function GridPage() {
                 <input
                   type="text"
                   value={gridState.title || 'Super Bowl LX'}
-                  onChange={async (e) => {
-                    const newState = { ...gridState, title: e.target.value };
-                    setGridState(newState);
-                    
-                    try {
-                      await StorageFactory.getInstance().saveGrid(newState);
-                    } catch (error) {
-                      console.error('Failed to save grid state:', error);
-                    }
+                  onChange={(e) => {
+                    setGridState({ ...gridState, title: e.target.value });
                   }}
                   className="w-full px-3 py-2.5 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-black transition-all duration-200"
                   placeholder="Super Bowl LX"
@@ -1881,15 +2015,8 @@ export default function GridPage() {
                   <input
                     type="text"
                     value={gridState.homeTeamName || 'Home Team'}
-                    onChange={async (e) => {
-                      const newState = { ...gridState, homeTeamName: e.target.value };
-                      setGridState(newState);
-                      
-                      try {
-                        await StorageFactory.getInstance().saveGrid(newState);
-                      } catch (error) {
-                        console.error('Failed to save grid state:', error);
-                      }
+                    onChange={(e) => {
+                      setGridState({ ...gridState, homeTeamName: e.target.value });
                     }}
                     className="w-full px-3 py-2.5 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-black transition-all duration-200"
                     placeholder="Home Team"
@@ -1902,15 +2029,8 @@ export default function GridPage() {
                   <input
                     type="text"
                     value={gridState.awayTeamName || 'Away Team'}
-                    onChange={async (e) => {
-                      const newState = { ...gridState, awayTeamName: e.target.value };
-                      setGridState(newState);
-                      
-                      try {
-                        await StorageFactory.getInstance().saveGrid(newState);
-                      } catch (error) {
-                        console.error('Failed to save grid state:', error);
-                      }
+                    onChange={(e) => {
+                      setGridState({ ...gridState, awayTeamName: e.target.value });
                     }}
                     className="w-full px-3 py-2.5 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-black transition-all duration-200"
                     placeholder="Away Team"
@@ -1923,7 +2043,8 @@ export default function GridPage() {
                 <h4 className="text-sm font-semibold text-gray-700 mb-3">Grid Management</h4>
                 <div className="space-y-2">
                   <button
-                    onClick={() => {
+                    onClick={async () => {
+                      await saveGridState(gridState);
                       setShowSettingsModal(false);
                       setShowClearNamesConfirm(true);
                     }}
@@ -1932,10 +2053,11 @@ export default function GridPage() {
                   >
                     🗑️ Clear All Names
                   </button>
-                  
+
                   <button
-                    onClick={() => {
+                    onClick={async () => {
                       if (gridState.numbersGenerated) {
+                        await saveGridState(gridState);
                         setShowSettingsModal(false);
                         setShowClearNumbersConfirm(true);
                       }
@@ -2089,6 +2211,76 @@ export default function GridPage() {
                 No credit card required • Import your current grid • 2 minute setup
               </p>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Share Modal */}
+      {shareModalOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setShareModalOpen(false)}>
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-xl font-bold mb-4 text-black">Share Your Grid</h3>
+
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-black mb-2">
+                Share Code
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={shareCode}
+                  readOnly
+                  className="flex-1 px-3 py-2 border border-gray-300 rounded-md bg-gray-50 font-mono text-lg text-center text-black"
+                />
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(shareCode);
+                    setToast('Code copied to clipboard!');
+                    setTimeout(() => setToast(null), 2000);
+                  }}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                >
+                  Copy
+                </button>
+              </div>
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-black mb-2">
+                Share Link
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={shareUrl}
+                  readOnly
+                  className="flex-1 px-3 py-2 border border-gray-300 rounded-md bg-gray-50 text-sm text-black"
+                />
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(shareUrl);
+                    setToast('Link copied to clipboard!');
+                    setTimeout(() => setToast(null), 2000);
+                  }}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                >
+                  Copy
+                </button>
+              </div>
+            </div>
+
+            <div className="bg-blue-50 p-3 rounded-md mb-4">
+              <p className="text-sm text-black">
+                Share this code or link with participants so they can view the grid and track winners in real-time.
+              </p>
+            </div>
+
+            <button
+              onClick={() => setShareModalOpen(false)}
+              className="w-full bg-gray-200 hover:bg-gray-300 text-black px-4 py-2 rounded-md transition-colors"
+            >
+              Close
+            </button>
           </div>
         </div>
       )}
@@ -2284,7 +2476,55 @@ export default function GridPage() {
                 ×
               </button>
             </div>
-            
+
+            {/* Sample Side Pool Configurations */}
+            <div className="mb-6 p-4 bg-gradient-to-r from-blue-50 to-purple-50 border border-blue-200 rounded-lg">
+              <h4 className="text-sm font-semibold text-black mb-3 flex items-center gap-2">
+                <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                Quick Start: Apply Sample Configuration
+              </h4>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <button
+                  onClick={() => handleApplySampleSidePools('popular')}
+                  className="p-3 bg-white border border-blue-300 rounded-lg hover:bg-blue-50 hover:border-blue-500 transition-all duration-200 text-left group"
+                >
+                  <div className="text-sm font-semibold text-black mb-1 group-hover:text-blue-700">🔥 Popular</div>
+                  <div className="text-xs text-gray-600 mb-2">Most commonly used setup</div>
+                  <div className="text-xs text-gray-500 space-y-1">
+                    <div>• Reverse Final: 5%</div>
+                    <div>• Overtime: 3%</div>
+                  </div>
+                </button>
+
+                <button
+                  onClick={() => handleApplySampleSidePools('balanced')}
+                  className="p-3 bg-white border border-purple-300 rounded-lg hover:bg-purple-50 hover:border-purple-500 transition-all duration-200 text-left group"
+                >
+                  <div className="text-sm font-semibold text-black mb-1 group-hover:text-purple-700">⚖️ Balanced</div>
+                  <div className="text-xs text-gray-600 mb-2">Even distribution of side pools</div>
+                  <div className="text-xs text-gray-500 space-y-1">
+                    <div>• Reverse Final: 5%</div>
+                    <div>• Reverse Halftime: 5%</div>
+                  </div>
+                </button>
+
+                <button
+                  onClick={() => handleApplySampleSidePools('highstakes')}
+                  className="p-3 bg-white border border-green-300 rounded-lg hover:bg-green-50 hover:border-green-500 transition-all duration-200 text-left group"
+                >
+                  <div className="text-sm font-semibold text-black mb-1 group-hover:text-green-700">💰 High Stakes</div>
+                  <div className="text-xs text-gray-600 mb-2">Maximum excitement & payouts</div>
+                  <div className="text-xs text-gray-500 space-y-1">
+                    <div>• Reverse Final: 10%</div>
+                    <div>• Overtime: 5%</div>
+                    <div>• Winning Team: 5%</div>
+                  </div>
+                </button>
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {(gridState.sidePools || []).map((pool) => (
                 <div key={pool.id} className="border border-gray-200 rounded-lg p-5 space-y-3 bg-gray-50 relative">
@@ -2460,6 +2700,13 @@ export default function GridPage() {
               )}
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Toast Notification */}
+      {toast && (
+        <div className="fixed bottom-4 right-4 bg-green-600 text-white px-6 py-3 rounded-lg shadow-lg z-50 animate-fade-in">
+          {toast}
         </div>
       )}
 

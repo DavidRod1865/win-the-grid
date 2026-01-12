@@ -1,36 +1,30 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { use, useState, useEffect } from 'react';
 import Link from 'next/link';
-import { GridState, LiveScoreData, Winner } from '@/types';
-import { StorageFactory } from '@/lib/storage';
-import { GameDayManager } from '@/lib/game-day';
+import { GridState } from '@/types';
+import { SupabaseProvider } from '@/lib/storage';
 
 interface SharePageProps {
-  params: {
+  params: Promise<{
     joinCode: string;
-  };
+  }>;
 }
 
 export default function SharePage({ params }: SharePageProps) {
+  const { joinCode } = use(params);
   const [gridState, setGridState] = useState<GridState | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [liveScores, setLiveScores] = useState<LiveScoreData | null>(null);
-  const [isGameDay, setIsGameDay] = useState(false);
 
   useEffect(() => {
     const loadSharedGrid = async () => {
       try {
         setLoading(true);
-        const provider = StorageFactory.getProvider();
-        
-        if (!provider.getGridByJoinCode) {
-          throw new Error('Grid sharing not available');
-        }
+        const supabaseProvider = new SupabaseProvider();
 
-        const grid = await provider.getGridByJoinCode(params.joinCode);
-        
+        const grid = await supabaseProvider.getGridByJoinCode(joinCode);
+
         if (!grid) {
           throw new Error('Grid not found or join code expired');
         }
@@ -43,14 +37,7 @@ export default function SharePage({ params }: SharePageProps) {
         };
 
         setGridState(viewOnlyGrid);
-        
-        // Check if this is a premium grid with live scoring enabled
-        if (grid.liveScoringEnabled && grid.ownership?.isPremium) {
-          setIsGameDay(true);
-          // TODO: Start live score polling
-          startLiveScoreUpdates(grid.id || '');
-        }
-        
+
       } catch (err) {
         console.error('Failed to load shared grid:', err);
         setError(err instanceof Error ? err.message : 'Failed to load grid');
@@ -60,104 +47,24 @@ export default function SharePage({ params }: SharePageProps) {
     };
 
     loadSharedGrid();
-  }, [params.joinCode]);
+  }, [joinCode]);
 
-  const startLiveScoreUpdates = async (gridId: string) => {
-    // TODO: Implement live score API integration
-    // For now, simulate live updates
-    console.log('Starting live score updates for grid:', gridId);
-    
-    // Mock live score data
-    const mockScores: LiveScoreData = {
-      gameId: 'superbowl-2025',
-      homeTeam: {
-        name: 'Team Home',
-        score: 14,
-        abbreviation: 'HOME'
-      },
-      awayTeam: {
-        name: 'Team Away', 
-        score: 7,
-        abbreviation: 'AWAY'
-      },
-      quarter: '2nd Quarter',
-      timeRemaining: '5:23',
-      gameStatus: 'live',
-      lastUpdated: new Date().toISOString()
-    };
-    
-    setLiveScores(mockScores);
-    
-    // TODO: Set up real-time score polling
-    // const interval = setInterval(async () => {
-    //   try {
-    //     const scores = await fetchLiveScores(gridId);
-    //     setLiveScores(scores);
-    //     
-    //     // Update grid state with new winners if scores changed
-    //     if (gridState && scores.gameStatus === 'live') {
-    //       const newWinners = calculateCurrentWinners(gridState, scores);
-    //       setGridState(prev => prev ? { ...prev, gameWinners: newWinners } : null);
-    //     }
-    //   } catch (error) {
-    //     console.error('Failed to fetch live scores:', error);
-    //   }
-    // }, 30000); // Update every 30 seconds
-    //
-    // return () => clearInterval(interval);
-  };
+  const getWinningBoxes = (): number[] => {
+    if (!gridState?.gameWinners || !gridState.numbersGenerated) return [];
 
-  const calculateCurrentWinners = (grid: GridState, scores: LiveScoreData): Winner[] => {
-    if (!grid.numbersGenerated) return [];
-    
-    const winners: Winner[] = [];
-    
-    // Determine winners for each completed quarter
-    const quarters = ['1st Quarter', '2nd Quarter', '3rd Quarter', 'Final Score'];
-    
-    // For demo, assume we have scores for each quarter
-    // TODO: Get actual quarter scores from live data
-    quarters.forEach(quarter => {
-      try {
-        const winner = GameDayManager.determineWinner(
-          grid,
-          scores.homeTeam.score,
-          scores.awayTeam.score,
-          quarter
-        );
-        
-        if (winner) {
-          winners.push(winner);
-        }
-      } catch (error) {
-        console.error(`Failed to determine winner for ${quarter}:`, error);
-      }
+    return gridState.gameWinners.map(winner => {
+      const rowIndex = gridState.rowNumbers.indexOf(winner.awayLastDigit);
+      const colIndex = gridState.colNumbers.indexOf(winner.homeLastDigit);
+      return rowIndex * 10 + colIndex;
     });
-    
-    return winners;
-  };
-
-  const getBoxClassName = (box: { name: string }, row: number, col: number) => {
-    const isWinningBox = gridState?.gameWinners?.some(winner => {
-      const winnerCoords = GameDayManager.getWinnerCoordinates(winner);
-      return winnerCoords.row === row && winnerCoords.col === col;
-    });
-
-    return `h-8 border border-gray-300 flex items-center justify-center text-xs font-medium cursor-default ${
-      box.name.trim() 
-        ? isWinningBox
-          ? 'bg-green-200 text-green-800 font-bold'
-          : 'bg-blue-50 text-blue-900'
-        : 'bg-gray-50 text-gray-400'
-    }`;
   };
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-green-50">
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading shared grid...</p>
+          <p className="mt-4 text-black">Loading shared grid...</p>
         </div>
       </div>
     );
@@ -165,14 +72,14 @@ export default function SharePage({ params }: SharePageProps) {
 
   if (error) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-green-50">
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center max-w-md">
           <div className="text-red-500 text-6xl mb-4">⚠️</div>
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">Grid Not Found</h1>
+          <h1 className="text-2xl font-bold text-black mb-2">Grid Not Found</h1>
           <p className="text-gray-600 mb-6">{error}</p>
-          <Link 
-            href="/" 
-            className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg transition-colors"
+          <Link
+            href="/"
+            className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg transition-colors inline-block"
           >
             Create Your Own Grid
           </Link>
@@ -186,194 +93,294 @@ export default function SharePage({ params }: SharePageProps) {
   }
 
   const filledBoxesCount = gridState.boxes.filter(box => box.name.trim() !== '').length;
-  const currentPot = gridState.pricePerBox * 100;
+  const totalPot = gridState.pricePerBox * 100;
+
+  // Calculate side pools
+  const enabledSidePools = (gridState.sidePools || []).filter(pool => pool.enabled);
+  const totalSidePoolPercentage = enabledSidePools.reduce((sum, pool) => sum + (pool.percentage || 0), 0);
+  const totalSidePoolAmount = Math.round((totalPot * totalSidePoolPercentage) / 100);
+  const remainingPotForMainPayouts = totalPot - totalSidePoolAmount;
+
+  // Calculate payouts including side pools
+  const calculatedPayouts = gridState.payoutRules.map(rule => ({
+    quarter: rule.quarter,
+    percentage: rule.percentage,
+    amount: Math.round((remainingPotForMainPayouts * rule.percentage) / 100)
+  }));
+
+  const sidePoolPayouts = enabledSidePools.map(pool => ({
+    quarter: pool.name,
+    percentage: pool.percentage || 0,
+    amount: Math.round((totalPot * (pool.percentage || 0)) / 100)
+  }));
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-green-50 p-4">
-      <div className="max-w-7xl mx-auto">
+    <div className="min-h-screen relative">
+      {/* Background Image with Overlay */}
+      <div
+        className="fixed inset-0 z-0"
+        style={{
+          backgroundImage: 'url(https://images.unsplash.com/photo-1566577739112-5180d4bf9390?q=80&w=3333&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D)',
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundRepeat: 'no-repeat'
+        }}
+      >
+        <div className="absolute inset-0 bg-linear-to-br from-blue-900/75 via-blue-800/65 to-green-900/75"></div>
+      </div>
+
+      {/* Content */}
+      <div className="relative z-10">
         {/* Header */}
-        <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">
-                {gridState.title || 'Super Bowl Squares'}
-              </h1>
-              <p className="text-gray-600">Shared Grid - View Only</p>
+        <header className="bg-white/90 backdrop-blur-md border-b border-white/20 sticky top-0 z-40 shadow-lg">
+          <div className="max-w-7xl mx-auto px-4 py-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900">
+                  {gridState.title || 'Super Bowl LX'}
+                </h1>
+                <p className="text-gray-600 text-sm mt-1">Shared Grid - View Only</p>
+              </div>
+              <div className="flex items-center gap-3">
+                <Link
+                  href="/auth/signup"
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md font-medium transition-colors"
+                >
+                  Sign Up Free
+                </Link>
+                <Link
+                  href="/"
+                  className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-md font-medium transition-colors"
+                >
+                  Create Your Own
+                </Link>
+              </div>
             </div>
-            
-            {isGameDay && liveScores && (
-              <div className="text-center">
-                <div className="bg-red-100 text-red-800 px-4 py-2 rounded-lg">
-                  <div className="font-bold">🏈 LIVE GAME</div>
-                  <div className="text-sm">
-                    {liveScores.homeTeam.name} {liveScores.homeTeam.score} - {liveScores.awayTeam.score} {liveScores.awayTeam.name}
-                  </div>
-                  <div className="text-xs">
-                    {liveScores.quarter} - {liveScores.timeRemaining}
-                  </div>
+          </div>
+        </header>
+
+        {/* Main Content */}
+        <main className="max-w-7xl mx-auto px-4 py-8">
+          {/* Stats Card */}
+          <div className="bg-white/90 backdrop-blur-md rounded-lg shadow-lg p-6 mb-6 border border-white/20">
+
+          {/* Stats - Two Column Layout */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Grid Stats */}
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-3">📊 Grid Stats</h3>
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-700">Boxes Filled:</span>
+                  <span className="font-bold text-black">{filledBoxesCount}/100</span>
                 </div>
-              </div>
-            )}
-          </div>
-
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
-            <div>
-              <div className="text-2xl font-bold text-green-600">{filledBoxesCount}/100</div>
-              <div className="text-sm text-gray-600">Boxes Filled</div>
-            </div>
-            <div>
-              <div className="text-2xl font-bold text-blue-600">${gridState.pricePerBox}</div>
-              <div className="text-sm text-gray-600">Per Box</div>
-            </div>
-            <div>
-              <div className="text-2xl font-bold text-purple-600">${currentPot}</div>
-              <div className="text-sm text-gray-600">Total Pot</div>
-            </div>
-            <div>
-              <div className="text-2xl font-bold text-orange-600">
-                {gridState.gameWinners?.length || 0}
-              </div>
-              <div className="text-sm text-gray-600">Winners</div>
-            </div>
-          </div>
-        </div>
-
-        <div className="grid lg:grid-cols-3 gap-6">
-          {/* Grid */}
-          <div className="lg:col-span-2">
-            <div className="bg-white rounded-lg shadow-lg p-6">
-              <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
-                🏈 Super Bowl Squares Grid
-                {isGameDay && (
-                  <span className="bg-red-100 text-red-800 px-2 py-1 rounded text-sm animate-pulse">
-                    LIVE
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-700">Price Per Box:</span>
+                  <span className="font-bold text-black">${gridState.pricePerBox}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-700">Numbers:</span>
+                  <span className="font-bold text-black">
+                    {gridState.numbersGenerated ? '✅ Generated' : '⏳ Pending'}
                   </span>
-                )}
-              </h2>
-              
-              <div className="grid grid-cols-11 gap-0 border-2 border-gray-900 inline-block">
-                {/* Header row with away team numbers */}
-                <div className="h-8 bg-blue-600 text-white flex items-center justify-center text-xs font-bold">
-                  {gridState.awayTeamName || 'Away'}
                 </div>
-                {gridState.numbersGenerated ? (
-                  gridState.rowNumbers.map((num, i) => (
-                    <div key={i} className="h-8 bg-blue-600 text-white flex items-center justify-center text-sm font-bold border-l border-white">
-                      {num}
-                    </div>
-                  ))
-                ) : (
-                  Array.from({ length: 10 }, (_, i) => (
-                    <div key={i} className="h-8 bg-blue-400 text-white flex items-center justify-center text-sm">
-                      ?
-                    </div>
-                  ))
-                )}
-
-                {/* Grid rows */}
-                {Array.from({ length: 10 }, (_, rowIndex) => (
-                  <div key={`row-${rowIndex}`} className="contents">
-                    {/* Home team number column */}
-                    <div className="h-8 bg-green-600 text-white flex items-center justify-center text-sm font-bold border-t border-white">
-                      {gridState.numbersGenerated ? gridState.colNumbers[rowIndex] : '?'}
-                    </div>
-                    
-                    {/* Grid boxes */}
-                    {Array.from({ length: 10 }, (_, colIndex) => {
-                      const boxIndex = rowIndex * 10 + colIndex;
-                      const box = gridState.boxes[boxIndex];
-                      return (
-                        <div
-                          key={`${rowIndex}-${colIndex}`}
-                          className={getBoxClassName(box, rowIndex, colIndex)}
-                          title={box.name || 'Empty box'}
-                        >
-                          {box.name || ''}
-                        </div>
-                      );
-                    })}
-                  </div>
-                ))}
-              </div>
-
-              <div className="mt-4 text-sm text-gray-600 text-center">
-                <div className="mb-2">
-                  <span className="font-semibold text-green-600">{gridState.homeTeamName || 'Home Team'}</span> numbers run vertically
-                </div>
-                <div>
-                  <span className="font-semibold text-blue-600">{gridState.awayTeamName || 'Away Team'}</span> numbers run horizontally
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-700">Winners:</span>
+                  <span className="font-bold text-black">{gridState.gameWinners?.length || 0}</span>
                 </div>
               </div>
             </div>
+
+            {/* Pot Details */}
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-3">💰 Pot Details</h3>
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-700">Total Pot:</span>
+                  <span className="font-bold text-green-600 text-xl">${totalPot.toLocaleString()}</span>
+                </div>
+
+                {/* Main Payouts */}
+                <div className="pt-2 border-t border-gray-200">
+                  <div className="text-sm font-semibold text-gray-900 mb-2">Main Payouts:</div>
+                  {calculatedPayouts.map((payout, index) => (
+                    <div key={index} className="flex justify-between items-center text-sm">
+                      <span className="text-gray-600">{payout.quarter}:</span>
+                      <span className="text-black font-medium">${payout.amount.toLocaleString()}</span>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Side Pools */}
+                {sidePoolPayouts.length > 0 && (
+                  <div className="pt-2 border-t border-gray-200">
+                    <div className="text-sm font-semibold text-gray-900 mb-2">Side Pools:</div>
+                    {sidePoolPayouts.map((payout, index) => (
+                      <div key={index} className="flex justify-between items-center text-sm">
+                        <span className="text-gray-600">{payout.quarter}:</span>
+                        <span className="text-purple-600 font-medium">${payout.amount.toLocaleString()}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
           </div>
 
-          {/* Sidebar with payouts and winners */}
-          <div className="space-y-6">
-            {/* Winners */}
-            {gridState.gameWinners && gridState.gameWinners.length > 0 && (
-              <div className="bg-white rounded-lg shadow-lg p-6">
-                <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                  🏆 Winners
-                  {isGameDay && (
-                    <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">
-                      LIVE
-                    </span>
-                  )}
-                </h3>
-                <div className="space-y-3">
-                  {gridState.gameWinners.map((winner, index) => (
-                    <div key={index} className="bg-green-50 p-3 rounded-lg">
-                      <div className="font-semibold text-green-800">{winner.participantName}</div>
-                      <div className="text-sm text-green-600">{winner.quarter}</div>
-                      <div className="text-sm text-gray-600">
-                        Score: {winner.awayLastDigit}-{winner.homeLastDigit}
-                      </div>
-                      <div className="font-bold text-green-700">${winner.amount}</div>
+          {/* Grid - Full Width */}
+          <div className="bg-white/90 backdrop-blur-md rounded-lg shadow-lg p-6 mb-6 border border-white/20">
+          <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center gap-2">
+            🏈 {gridState.title || 'Super Bowl LX'}
+          </h2>
+
+          <div className="overflow-x-auto">
+            <div className="inline-block min-w-full relative">
+
+              {/* Top Left Corner Spacer */}
+              <div className="absolute top-0 left-0 w-32 h-32 border-2 border-gray-400 bg-white z-50"></div>
+
+              {/* Team Name Row */}
+              <div className="flex">
+                <div className="w-12 h-16"></div>
+                <div className="w-12 h-16"></div>
+                <div className="flex-1 min-w-160 h-16 flex items-center justify-center font-semibold text-base md:text-lg lg:text-xl text-black border-2 border-gray-400 bg-blue-50">
+                  {gridState.homeTeamName || 'Home Team'}
+                </div>
+              </div>
+
+              {/* Column Headers */}
+              <div className="flex">
+                <div className="w-16 h-16"></div>
+                <div className="w-16 h-16"></div>
+                <div className="flex flex-1">
+                  {Array.from({ length: 10 }, (_, i) => (
+                    <div key={i} className="flex-1 min-w-20 h-16 border-2 border-gray-400 bg-blue-100 flex items-center justify-center font-bold text-base md:text-lg lg:text-xl text-black">
+                      {gridState.numbersGenerated ? gridState.colNumbers[i] : ''}
                     </div>
                   ))}
                 </div>
               </div>
-            )}
 
-            {/* Payout Structure */}
-            <div className="bg-white rounded-lg shadow-lg p-6">
-              <h3 className="text-lg font-semibold mb-4">💰 Payout Structure</h3>
-              <div className="space-y-2">
-                {gridState.payoutRules.map((rule, index) => {
-                  const amount = Math.round((currentPot * rule.percentage) / 100);
-                  return (
-                    <div key={index} className="flex justify-between items-center py-2 border-b border-gray-100 last:border-b-0">
-                      <span className="text-gray-700">{rule.quarter}</span>
-                      <div className="text-right">
-                        <div className="font-semibold">${amount}</div>
-                        <div className="text-xs text-gray-500">{rule.percentage}%</div>
+              {/* Grid Rows Container with Away Team */}
+              <div className="relative flex">
+                {/* Away Team - spans all rows */}
+                <div className="w-12 h-200 flex items-center justify-center font-semibold text-base md:text-lg lg:text-xl text-black border-2 border-gray-400 bg-red-50 absolute left-0">
+                  <span className="transform -rotate-90 whitespace-nowrap">{gridState.awayTeamName || 'Away Team'}</span>
+                </div>
+
+                {/* Grid Rows */}
+                <div className="ml-12 flex-1">
+                  {Array.from({ length: 10 }, (_, row) => (
+                    <div key={row} className="flex">
+                      <div className="w-20 h-20 border-2 border-gray-400 bg-red-100 flex items-center justify-center font-bold text-base md:text-lg lg:text-xl text-black shrink-0">
+                        {gridState.numbersGenerated ? gridState.rowNumbers[row] : ''}
+                      </div>
+                      <div className="flex flex-1">
+                        {/* Row Boxes */}
+                        {Array.from({ length: 10 }, (_, col) => {
+                          const boxIndex = row * 10 + col;
+                          const box = gridState.boxes[boxIndex];
+                          const isWinningBox = getWinningBoxes().includes(boxIndex);
+                          const winner = gridState.gameWinners?.find(w => w.boxIndex === boxIndex);
+
+                          return (
+                            <div
+                              key={col}
+                              className={`flex-1 min-w-20 h-20 border border-gray-300 flex items-center justify-center text-sm md:text-base lg:text-lg font-medium text-black relative ${
+                                isWinningBox
+                                  ? 'bg-yellow-200 border-yellow-500 border-2 shadow-lg'
+                                  : box.name
+                                    ? 'bg-green-50'
+                                    : 'bg-white'
+                              }`}
+                              title={box.name || 'Empty box'}
+                            >
+                              {/* Number badge in top right corner */}
+                              <div className="absolute top-0 right-0 bg-white text-black text-[10px] md:text-xs lg:text-sm font-semibold w-5 h-5 md:w-6 md:h-6 flex items-center justify-center">
+                                {boxIndex + 1}
+                              </div>
+
+                              {/* Winner badge in top left corner */}
+                              {winner && (
+                                <div className="absolute top-0 left-0 bg-yellow-500 text-black text-[8px] md:text-[10px] lg:text-xs font-bold w-4 h-4 md:w-5 md:h-5 flex items-center justify-center rounded-br">
+                                  {winner.quarter.split(' ')[0]}
+                                </div>
+                              )}
+
+                              <span className="truncate px-1">{box.name || ''}</span>
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
-                  );
-                })}
+                  ))}
+                </div>
               </div>
             </div>
+          </div>
 
-            {/* Create Your Own */}
-            <div className="bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg shadow-lg p-6 text-white text-center">
-              <h3 className="text-lg font-semibold mb-2">Create Your Own Grid</h3>
-              <p className="text-sm mb-4 opacity-90">
-                Set up your own Super Bowl squares game with custom payouts and live scoring.
-              </p>
-              <Link 
-                href="/"
-                className="bg-white text-blue-600 px-6 py-2 rounded-lg font-medium hover:bg-gray-100 transition-colors inline-block"
-              >
-                Get Started Free
-              </Link>
+          <div className="mt-4 text-sm text-gray-600 text-center">
+            <div className="mb-2">
+              <span className="font-semibold text-green-600">{gridState.homeTeamName || 'Home Team'}</span> numbers run horizontally (top)
+            </div>
+            <div>
+              <span className="font-semibold text-red-600">{gridState.awayTeamName || 'Away Team'}</span> numbers run vertically (left)
             </div>
           </div>
+
+          {/* Winners List */}
+          {gridState.gameWinners && gridState.gameWinners.length > 0 && (
+            <div className="mt-6 pt-6 border-t border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">🏆 Winners</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                {gridState.gameWinners.map((winner, index) => (
+                  <div key={index} className="bg-yellow-50 border border-yellow-200 p-3 rounded-lg">
+                    <div className="font-bold text-black">{winner.participantName}</div>
+                    <div className="text-sm text-gray-600">{winner.quarter}</div>
+                    <div className="text-sm text-gray-600">
+                      Numbers: {winner.awayLastDigit}-{winner.homeLastDigit}
+                    </div>
+                    <div className="font-bold text-green-600 text-lg">${winner.amount.toLocaleString()}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* Footer */}
-        <div className="text-center mt-8 text-gray-600 text-sm">
-          <p>This grid is shared read-only. To edit or manage this grid, you need the owner's permission.</p>
-        </div>
+          {/* Advertisement - Create Your Own Grid */}
+          <div className="bg-white/90 backdrop-blur-md rounded-lg shadow-lg p-8 border border-white/20">
+            <div className="text-center">
+              <h2 className="text-2xl md:text-3xl font-bold mb-3 text-gray-900">Create Your Own Super Bowl Squares Grid</h2>
+              <p className="text-lg mb-6 text-gray-700">
+                Free to create • Custom payouts • Side pools • Live scoring • Easy sharing
+              </p>
+              <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
+                <Link
+                  href="/auth/signup"
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-lg font-bold text-lg transition-colors inline-block shadow-lg"
+                >
+                  Sign Up Free
+                </Link>
+                <Link
+                  href="/"
+                  className="bg-purple-600 hover:bg-purple-700 text-white px-8 py-3 rounded-lg font-bold text-lg transition-colors inline-block shadow-lg"
+                >
+                  Create Your Own
+                </Link>
+              </div>
+              <div className="mt-6 text-sm text-gray-600">
+                Join thousands of users hosting Super Bowl squares games
+              </div>
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div className="text-center mt-6 text-white text-sm">
+            <p>This grid is shared in view-only mode. Contact the grid owner to request changes.</p>
+          </div>
+        </main>
       </div>
     </div>
   );

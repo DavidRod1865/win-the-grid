@@ -68,8 +68,8 @@ export default function SigninPage() {
         // Show migration option or automatically migrate
         router.push('/auth/migrate');
       } else {
-        // Normal signin flow
-        router.push('/grid');
+        // Normal signin flow - go to grids page
+        router.push('/grids');
       }
 
     } catch (error) {

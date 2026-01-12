@@ -30,11 +30,30 @@ export default function SignupWithMigration({ onComplete }: SignupWithMigrationP
   const checkForLocalData = async () => {
     try {
       const hasSignificantData = LocalStorageProvider.hasSignificantData();
+      console.log('Checking for local data:', hasSignificantData);
+      
+      // Debug localStorage content
+      if (typeof window !== 'undefined') {
+        const gridData = localStorage.getItem('squares-calculator-state-local-grid');
+        console.log('Raw localStorage data:', gridData);
+        if (gridData) {
+          try {
+            const parsed = JSON.parse(gridData);
+            const participantCount = parsed.boxes?.filter((box: any) => box?.name?.trim()).length || 0;
+            console.log('Parsed grid data:', { participantCount, numbersGenerated: parsed.numbersGenerated });
+          } catch (e) {
+            console.log('Failed to parse grid data:', e);
+          }
+        }
+      }
+      
       setHasLocalData(hasSignificantData);
       
       if (hasSignificantData) {
+        console.log('Has significant data - showing preview');
         setCurrentStep('show-preview');
       } else {
+        console.log('No significant data - going to signup form');
         setCurrentStep('signup-form');
       }
     } catch (error) {
@@ -96,14 +115,20 @@ export default function SignupWithMigration({ onComplete }: SignupWithMigrationP
       // Use real user ID from Supabase
       setUserId(data.user?.id || null);
 
+      console.log('Signup flow decision:', { hasLocalData, skipMigration });
+      
       if (hasLocalData && !skipMigration) {
+        console.log('Starting migration process');
         setCurrentStep('migration');
       } else {
+        console.log('Skipping migration:', { hasLocalData, skipMigration });
         if (skipMigration) {
           // Clear localStorage if user chose to skip migration
           await LocalStorageProvider.clearAfterMigration();
         }
         setCurrentStep('complete');
+        // Add timeout to show success message, then redirect
+        setTimeout(() => onComplete(true), 2000);
       }
 
     } catch (error) {

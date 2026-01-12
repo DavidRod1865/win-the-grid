@@ -9,13 +9,13 @@ export default function SignupPage() {
 
   const handleSignupComplete = (success: boolean, gridId?: string) => {
     if (success) {
-      // Redirect based on whether they had migrated data or not
+      // Redirect to grids page to show all user's grids
       if (gridId && gridId !== 'local-grid') {
-        // They had data that was migrated - go to their grid
-        router.push(`/grid?migrated=true`);
+        // They had data that was migrated - go to grids page with success message
+        router.push(`/grids?migrated=true&gridId=${gridId}`);
       } else {
-        // Fresh start - go to main grid creation
-        router.push('/grid?newUser=true');
+        // Fresh start - go to grids page
+        router.push('/grids?newUser=true');
       }
     } else {
       // Handle signup failure

@@ -69,15 +69,13 @@ export default function MigrationFlow({ onComplete, onSkip, userId }: MigrationF
 
       // Step 3: Migrate to Supabase
       updateProgress('migrating', 50, 'Saving your grid to the cloud...');
-      await new Promise(resolve => setTimeout(resolve, 1200));
 
-      // TODO: Actual Supabase migration once configured
-      // const supabaseProvider = new SupabaseProvider();
-      // const gridId = await supabaseProvider.migrateLocalStorageGrid(migrationInfo.gridState);
+      console.log('Starting real Supabase migration...');
+      const supabaseProvider = new SupabaseProvider();
+      const gridId = await supabaseProvider.migrateLocalStorageGrid(migrationInfo.gridState);
       
-      // For now, simulate successful migration
-      const simulatedGridId = 'migrated-grid-' + Date.now();
-      setMigratedGridId(simulatedGridId);
+      console.log('Migration successful, grid ID:', gridId);
+      setMigratedGridId(gridId);
 
       updateProgress('migrating', 75, 'Finalizing cloud setup...');
       await new Promise(resolve => setTimeout(resolve, 600));
@@ -94,7 +92,7 @@ export default function MigrationFlow({ onComplete, onSkip, userId }: MigrationF
       // Update storage factory to use Supabase
       StorageFactory.resetInstance();
 
-      setTimeout(() => onComplete(true, simulatedGridId), 1500);
+      setTimeout(() => onComplete(true, migratedGridId || undefined), 1500);
 
     } catch (error) {
       console.error('Migration failed:', error);

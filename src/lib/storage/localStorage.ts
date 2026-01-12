@@ -208,9 +208,13 @@ export class LocalStorageProvider implements StorageProvider {
     if (typeof window !== 'undefined') {
       // Add a small delay to ensure migration is complete
       await new Promise(resolve => setTimeout(resolve, 1000));
-      localStorage.removeItem(STORAGE_KEY);
       
-      // Optionally, store a flag that migration happened
+      // Clear both old and new format localStorage keys
+      localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem(`${STORAGE_KEY}-local-grid`);
+      localStorage.removeItem(GRIDS_LIST_KEY);
+      
+      // Store a flag that migration happened
       localStorage.setItem('squares-migration-completed', new Date().toISOString());
     }
   }
@@ -228,7 +232,14 @@ export class LocalStorageProvider implements StorageProvider {
   static hasSignificantData(): boolean {
     if (typeof window === 'undefined') return false;
     
-    const saved = localStorage.getItem(STORAGE_KEY);
+    // Check both old format and new format with grid IDs
+    let saved = localStorage.getItem(STORAGE_KEY);
+    
+    // If no data in old format, check for grid with 'local-grid' ID
+    if (!saved) {
+      saved = localStorage.getItem(`${STORAGE_KEY}-local-grid`);
+    }
+    
     if (!saved) return false;
 
     try {
@@ -275,7 +286,14 @@ export class LocalStorageProvider implements StorageProvider {
       };
     }
 
-    const saved = localStorage.getItem(STORAGE_KEY);
+    // Check both old format and new format with grid IDs
+    let saved = localStorage.getItem(STORAGE_KEY);
+    
+    // If no data in old format, check for grid with 'local-grid' ID
+    if (!saved) {
+      saved = localStorage.getItem(`${STORAGE_KEY}-local-grid`);
+    }
+    
     if (!saved) {
       return {
         hasData: false,

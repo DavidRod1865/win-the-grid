@@ -24,7 +24,7 @@ export interface SupabaseGridData {
     home: { name: string; abbreviation: string; logo_url?: string };
     away: { name: string; abbreviation: string; logo_url?: string };
   };
-  participants: Record<string, { name: string; filled_at: string; email?: string }>;
+  participants: Record<string, { name: string; filled_at: string; email?: string; paid?: boolean; paidDate?: string }>;
   row_numbers: number[] | null;
   col_numbers: number[] | null;
   numbers_generated: boolean;
@@ -47,15 +47,20 @@ export class MigrationTransformer {
    */
   static transformGridForSupabase(gridState: GridState): SupabaseGridData {
     // Convert boxes array to participants JSON object
-    const participants: Record<string, { name: string; filled_at: string; email?: string }> = {};
-    
+    const participants: Record<string, { name: string; filled_at: string; email?: string; paid?: boolean; paidDate?: string }> = {};
+
     if (gridState.boxes) {
       gridState.boxes.forEach((box, index) => {
         if (box.name && box.name.trim()) {
+          // Find payment info for this participant
+          const payment = gridState.participantPayments?.find(p => p.name === box.name.trim());
+
           participants[index.toString()] = {
             name: box.name.trim(),
             filled_at: new Date().toISOString(), // localStorage doesn't have timestamps
-            email: undefined // localStorage doesn't store emails
+            email: undefined, // localStorage doesn't store emails
+            paid: payment?.paid,
+            paidDate: payment?.paidDate
           };
         }
       });
@@ -110,7 +115,7 @@ export class MigrationTransformer {
       payout_template: gridState.selectedTemplate || 'Balanced',
       payout_rules: gridState.payoutRules || [],
       teams,
-      participants,
+      participants, // Now includes payment data (paid, paidDate)
       row_numbers: gridState.numbersGenerated ? (gridState.rowNumbers || null) : null,
       col_numbers: gridState.numbersGenerated ? (gridState.colNumbers || null) : null,
       numbers_generated: Boolean(gridState.numbersGenerated),

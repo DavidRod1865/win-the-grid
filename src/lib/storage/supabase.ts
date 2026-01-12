@@ -90,76 +90,103 @@ export class SupabaseProvider implements StorageProvider {
   }
 
   async saveGrid(gridState: GridState): Promise<string> {
-    // TODO: Implement Supabase save once client is configured
-    throw new Error('Supabase integration not yet implemented. API keys needed.');
+    const { MigrationTransformer } = await import('./migration');
     
-    // Implementation will be:
-    // const { MigrationTransformer } = await import('./migration');
-    // const supabaseData = MigrationTransformer.transformGridForSupabase(gridState);
-    // 
-    // if (gridState.id && gridState.id !== 'local-grid') {
-    //   // Update existing grid
-    //   const { error } = await this.supabase
-    //     .from('grids')
-    //     .update(supabaseData)
-    //     .eq('id', gridState.id)
-    //     .eq('created_by', auth.uid());
-    //   
-    //   if (error) throw error;
-    //   return gridState.id;
-    // } else {
-    //   // Create new grid
-    //   const { data, error } = await this.supabase
-    //     .rpc('create_grid_optimized', {
-    //       p_title: supabaseData.title,
-    //       p_sport_id: supabaseData.sport_id,
-    //       p_game_type_id: supabaseData.game_type_id,
-    //       p_price_per_box: supabaseData.price_per_box,
-    //       p_payout_template: supabaseData.payout_template,
-    //       p_payout_rules: supabaseData.payout_rules,
-    //       p_teams: supabaseData.teams
-    //     });
-    //   
-    //   if (error) throw error;
-    //   
-    //   const gridId = data[0].grid_id;
-    //   
-    //   // Update with participants if any exist
-    //   if (Object.keys(supabaseData.participants).length > 0) {
-    //     const { error: updateError } = await this.supabase
-    //       .from('grids')
-    //       .update({ participants: supabaseData.participants })
-    //       .eq('id', gridId);
-    //     
-    //     if (updateError) throw updateError;
-    //   }
-    //   
-    //   return gridId;
-    // }
+    // Get current user
+    const { data: { user }, error: authError } = await this.supabase.auth.getUser();
+    if (authError || !user) {
+      throw new Error('User must be authenticated to save grid');
+    }
+    
+    // Transform data for Supabase
+    const supabaseData = MigrationTransformer.transformGridForSupabase(gridState);
+    
+    if (gridState.id && gridState.id !== 'local-grid') {
+      // Update existing grid
+      const { error } = await this.supabase
+        .from('grids')
+        .update({
+          title: supabaseData.title,
+          price_per_box: supabaseData.price_per_box,
+          payout_template: supabaseData.payout_template,
+          payout_rules: supabaseData.payout_rules,
+          teams: supabaseData.teams,
+          participants: supabaseData.participants,
+          row_numbers: supabaseData.row_numbers,
+          col_numbers: supabaseData.col_numbers,
+          numbers_generated: supabaseData.numbers_generated,
+          winners: supabaseData.winners,
+          current_scores: supabaseData.current_scores,
+          side_pools: supabaseData.side_pools,
+          state: supabaseData.state,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', gridState.id)
+        .eq('created_by', user.id);
+      
+      if (error) {
+        console.error('Save grid error:', error);
+        throw new Error(`Failed to save grid: ${error.message}`);
+      }
+      return gridState.id;
+    } else {
+      // Create new grid - use the same logic as migrateLocalStorageGrid
+      return this.migrateLocalStorageGrid(gridState);
+    }
   }
 
   async loadGrid(gridId: string): Promise<GridState | null> {
-    // TODO: Implement Supabase load once client is configured
-    throw new Error('Supabase integration not yet implemented. API keys needed.');
-    
-    // Implementation will be:
-    // const { data, error } = await this.supabase
-    //   .from('grids')
-    //   .select('*')
-    //   .eq('id', gridId)
-    //   .single();
-    // 
-    // if (error) {
-    //   console.error('Failed to load grid:', error);
-    //   return null;
-    // }
-    // 
-    // return this.transformSupabaseToGridState(data);
+    try {
+      const { data, error } = await this.supabase
+        .from('grids')
+        .select('*')
+        .eq('id', gridId)
+        .single();
+      
+      if (error) {
+        console.error('Failed to load grid:', error);
+        return null;
+      }
+      
+      return this.transformSupabaseToGridState(data);
+    } catch (error) {
+      console.error('Error loading grid:', error);
+      return null;
+    }
   }
 
   async loadUserGrids(): Promise<GridState[]> {
-    // TODO: Implement user grids loading
-    throw new Error('Supabase integration not yet implemented. API keys needed.');
+    try {
+      // Get current user
+      const { data: { user }, error: authError } = await this.supabase.auth.getUser();
+      
+      if (authError || !user) {
+        console.warn('User not authenticated for loading grids');
+        return [];
+      }
+
+      // Load all grids created by this user
+      const { data, error } = await this.supabase
+        .from('grids')
+        .select('*')
+        .eq('created_by', user.id)
+        .order('updated_at', { ascending: false });
+
+      if (error) {
+        console.error('Failed to load user grids:', error);
+        return [];
+      }
+
+      if (!data || data.length === 0) {
+        return [];
+      }
+
+      // Transform each grid back to GridState format
+      return data.map(grid => this.transformSupabaseToGridState(grid));
+    } catch (error) {
+      console.error('Error loading user grids:', error);
+      return [];
+    }
   }
 
   async deleteGrid(gridId: string): Promise<void> {
@@ -168,31 +195,82 @@ export class SupabaseProvider implements StorageProvider {
   }
 
   async shareGrid(gridId: string): Promise<{ joinCode: string; shareUrl: string }> {
-    // TODO: Implement grid sharing once client is configured
-    throw new Error('Supabase integration not yet implemented. API keys needed.');
-    
-    // Implementation will be:
-    // const { data, error } = await this.supabase
-    //   .from('grids')
-    //   .update({ 
-    //     join_code: this.generateJoinCode(),
-    //     is_public: true,
-    //     share_count: this.supabase.raw('share_count + 1')
-    //   })
-    //   .eq('id', gridId)
-    //   .eq('created_by', auth.uid())
-    //   .select('join_code')
-    //   .single();
-    // 
-    // if (error) throw error;
-    // 
-    // const shareUrl = `${window.location.origin}/share/${data.join_code}`;
-    // return { joinCode: data.join_code, shareUrl };
+    try {
+      // Get current user
+      const { data: { user }, error: authError } = await this.supabase.auth.getUser();
+      if (authError || !user) {
+        throw new Error('User must be authenticated to share grid');
+      }
+
+      // Check if grid already has a join code
+      const { data: existingGrid, error: fetchError } = await this.supabase
+        .from('grids')
+        .select('join_code')
+        .eq('id', gridId)
+        .eq('created_by', user.id)
+        .single();
+
+      if (fetchError) {
+        throw new Error(`Failed to fetch grid: ${fetchError.message}`);
+      }
+
+      let joinCode = existingGrid.join_code;
+
+      // Generate join code if not exists
+      if (!joinCode) {
+        joinCode = this.generateJoinCode();
+        
+        const { error: updateError } = await this.supabase
+          .from('grids')
+          .update({
+            join_code: joinCode,
+            is_public: true
+          })
+          .eq('id', gridId)
+          .eq('created_by', user.id);
+
+        if (updateError) {
+          throw new Error(`Failed to update grid: ${updateError.message}`);
+        }
+      }
+
+      const shareUrl = `${window.location.origin}/share/${joinCode}`;
+      return { joinCode, shareUrl };
+    } catch (error) {
+      console.error('Error sharing grid:', error);
+      throw error;
+    }
   }
 
   async getGridByJoinCode(joinCode: string): Promise<GridState | null> {
-    // TODO: Implement join code lookup
-    throw new Error('Supabase integration not yet implemented. API keys needed.');
+    try {
+      const { data, error } = await this.supabase
+        .from('grids')
+        .select('*')
+        .eq('join_code', joinCode.toUpperCase())
+        .eq('is_public', true)
+        .single();
+
+      if (error) {
+        console.error('Failed to load grid by join code:', error);
+        return null;
+      }
+
+      if (!data) {
+        return null;
+      }
+
+      // Transform to GridState and mark as view-only
+      const gridState = this.transformSupabaseToGridState(data);
+      return {
+        ...gridState,
+        isViewOnly: true,
+        accessLevel: 'view-only' as const
+      };
+    } catch (error) {
+      console.error('Error loading grid by join code:', error);
+      return null;
+    }
   }
 
   async subscribeToGridUpdates(gridId: string, callback: (grid: GridState) => void): Promise<() => void> {
@@ -316,6 +394,25 @@ export class SupabaseProvider implements StorageProvider {
       };
     });
 
+    // Extract payment data from participants
+    const participantPayments: Array<{ name: string; paid: boolean; paidDate?: string }> = [];
+    const uniqueParticipants = new Set<string>();
+
+    if (supabaseGrid.participants) {
+      Object.values(supabaseGrid.participants).forEach((participant: any) => {
+        if (participant?.name && !uniqueParticipants.has(participant.name)) {
+          uniqueParticipants.add(participant.name);
+          if (participant.paid !== undefined) {
+            participantPayments.push({
+              name: participant.name,
+              paid: Boolean(participant.paid),
+              paidDate: participant.paidDate
+            });
+          }
+        }
+      });
+    }
+
     // Transform teams back to separate fields
     const teams = supabaseGrid.teams || {
       home: { name: 'Home Team' },
@@ -359,6 +456,7 @@ export class SupabaseProvider implements StorageProvider {
       homeTeamName: teams.home.name,
       awayTeamName: teams.away.name,
       sidePools: supabaseGrid.side_pools || [],
+      participantPayments, // Extracted from participants
       wentToOvertime: Boolean(supabaseGrid.went_to_overtime),
       winners: {}, // Legacy field
       // New fields

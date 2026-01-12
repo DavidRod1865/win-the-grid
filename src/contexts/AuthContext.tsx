@@ -23,11 +23,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Get initial session
     const getInitialSession = async () => {
       try {
-        const { data: { session: initialSession } } = await supabase.auth.getSession();
-        setSession(initialSession);
-        setUser(initialSession?.user ?? null);
+        const { data: { session: initialSession }, error } = await supabase.auth.getSession();
+        if (error) {
+          console.warn('Session error:', error.message);
+          // Clear any invalid session data
+          setSession(null);
+          setUser(null);
+        } else {
+          setSession(initialSession);
+          setUser(initialSession?.user ?? null);
+        }
       } catch (error) {
         console.error('Error getting initial session:', error);
+        // Clear session on error
+        setSession(null);
+        setUser(null);
       } finally {
         setLoading(false);
       }
@@ -39,15 +49,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('Auth event:', event, session?.user?.email || 'no user');
+      
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
 
-      // Optional: Handle specific auth events
+      // Handle specific auth events
       if (event === 'SIGNED_IN') {
         console.log('User signed in:', session?.user?.email);
       } else if (event === 'SIGNED_OUT') {
         console.log('User signed out');
+      } else if (event === 'TOKEN_REFRESHED') {
+        console.log('Token refreshed for:', session?.user?.email);
+      } else if (event === 'USER_UPDATED') {
+        console.log('User updated:', session?.user?.email);
       }
     });
 
