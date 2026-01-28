@@ -106,7 +106,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     const { data: userGrids } = await supabase
       .from('grids')
       .select('id')
-      .eq('owner_id', user_id)
+      .eq('created_by', user_id)
       .eq('is_premium', false);
 
     if (userGrids && userGrids.length > 0) {

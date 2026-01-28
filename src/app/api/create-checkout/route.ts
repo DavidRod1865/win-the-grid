@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
     // Check if grid exists and user owns it
     const { data: grid, error: gridError } = await supabase
       .from('grids')
-      .select('id, owner_id, is_premium, data')
+      .select('id, created_by, is_premium, data')
       .eq('id', gridId)
       .single();
 
@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (grid.owner_id !== userId) {
+    if (grid.created_by !== userId) {
       return NextResponse.json(
         { error: 'Unauthorized: You do not own this grid' },
         { status: 403 }
