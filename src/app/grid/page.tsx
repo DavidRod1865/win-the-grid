@@ -119,9 +119,24 @@ export default function GridPage() {
   const [showMobileMenu, setShowMobileMenu] = useState(false);
 
   // Grid page is for anonymous users only - always use localStorage
-  
+
   // Get available features based on subscription and grid
-  const features = getFeatures(userSubscription || undefined, gridState.id);
+  const [features, setFeatures] = useState<import('@/lib/storage').FeatureFlags>({
+    canCreateGrid: true,
+    canEditGrid: true,
+    canExportPDF: true,
+    canExportExcel: true,
+    canSaveToCloud: false,
+    canShare: false,
+    hasRealTimeUpdates: false,
+    hasGameDayMode: false,
+    canSendNotifications: false,
+    hasAnalytics: false,
+    canCustomizeBranding: false,
+    maxGridsPerMonth: Infinity,
+    showUpgradePrompts: false,
+    currentPlan: 'free',
+  });
 
   // Helper function to handle premium feature access
   const handlePremiumFeature = (action: () => void, featureName: string) => {
@@ -220,6 +235,21 @@ export default function GridPage() {
     // Load grid state for anonymous users
     loadInitialState();
   }, []);
+
+  // Load features based on subscription and grid
+  useEffect(() => {
+    const loadFeatures = async () => {
+      const result = getFeatures(userSubscription || undefined, gridState.id);
+      // Handle both sync and async returns
+      if (result instanceof Promise) {
+        const resolvedFeatures = await result;
+        setFeatures(resolvedFeatures);
+      } else {
+        setFeatures(result);
+      }
+    };
+    loadFeatures();
+  }, [userSubscription, gridState.id]);
 
   // Close dropdown when clicking outside
   useEffect(() => {

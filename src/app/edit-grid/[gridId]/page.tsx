@@ -135,9 +135,24 @@ export default function EditGridPage({ params }: EditGridPageProps) {
   const [showUnlockModal, setShowUnlockModal] = useState(false);
 
   // Dynamic grid loading with Supabase for authenticated users
-  
+
   // Get available features based on subscription and grid
-  const features = getFeatures(userSubscription || undefined, gridState?.id || gridId);
+  const [features, setFeatures] = useState<import('@/lib/storage').FeatureFlags>({
+    canCreateGrid: true,
+    canEditGrid: true,
+    canExportPDF: true,
+    canExportExcel: true,
+    canSaveToCloud: false,
+    canShare: false,
+    hasRealTimeUpdates: false,
+    hasGameDayMode: false,
+    canSendNotifications: false,
+    hasAnalytics: false,
+    canCustomizeBranding: false,
+    maxGridsPerMonth: Infinity,
+    showUpgradePrompts: false,
+    currentPlan: 'free',
+  });
 
   // Helper function to handle premium feature access
   const handlePremiumFeature = (action: () => void, featureName: string) => {
@@ -322,6 +337,21 @@ export default function EditGridPage({ params }: EditGridPageProps) {
       initializeGrid();
     }
   }, [user, loading, gridId]);
+
+  // Load features based on subscription and grid
+  useEffect(() => {
+    const loadFeatures = async () => {
+      const result = getFeatures(userSubscription || undefined, gridState?.id || gridId);
+      // Handle both sync and async returns
+      if (result instanceof Promise) {
+        const resolvedFeatures = await result;
+        setFeatures(resolvedFeatures);
+      } else {
+        setFeatures(result);
+      }
+    };
+    loadFeatures();
+  }, [userSubscription, gridState?.id, gridId]);
 
   // Close dropdown when clicking outside
   useEffect(() => {

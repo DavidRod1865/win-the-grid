@@ -366,9 +366,11 @@ export class SupabaseProvider implements StorageProvider {
     const hasAccount = !!subscription;
 
     // Check if user has active season pass
-    const hasSeasonPass = subscription?.seasonPassActive &&
+    const hasSeasonPass = Boolean(
+      subscription?.seasonPassActive &&
       subscription.seasonPassExpiry &&
-      new Date(subscription.seasonPassExpiry) > new Date();
+      new Date(subscription.seasonPassExpiry) > new Date()
+    );
 
     // Check if specific grid is premium
     let gridIsPremium = false;
@@ -399,6 +401,7 @@ export class SupabaseProvider implements StorageProvider {
       // Premium features (require payment)
       canShare: isPremium,
       hasRealTimeUpdates: isPremium,
+      hasGameDayMode: isPremium, // Premium feature - tied to grid premium status
       canSendNotifications: isPremium,
       hasAnalytics: isPremium,
 

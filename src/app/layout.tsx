@@ -14,6 +14,8 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+export const dynamic = 'force-dynamic';
+
 export const metadata: Metadata = {
   title: "Win The Grid - Super Bowl Squares Made Easy",
   description: "The easiest way to create and manage Super Bowl squares. Free grid generator with customizable payouts, sharing, and export features.",

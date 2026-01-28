@@ -31,9 +31,10 @@ export interface FeatureFlags {
   canExportExcel: boolean;
   canSaveToCloud: boolean; // Account vs localStorage
 
-  // Premium features (require payment)
+  // Premium features (require payment - unlocked with sharing)
   canShare: boolean;
   hasRealTimeUpdates: boolean;
+  hasGameDayMode: boolean; // Live scoring - premium feature
   canSendNotifications: boolean;
   hasAnalytics: boolean;
 

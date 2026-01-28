@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { getStripe } from '@/lib/stripe';
 import { analytics } from '@/lib/analytics';
 import { GridState } from '@/types';
 
@@ -61,19 +60,12 @@ export default function UnlockSharingModal({
       // Track redirect to Stripe
       analytics.checkoutRedirected(gridState.id!, data.sessionId);
 
-      // Redirect to Stripe Checkout
-      const stripe = await getStripe();
-      if (!stripe) {
-        throw new Error('Failed to load Stripe');
+      // Redirect to Stripe Checkout using the URL
+      if (!data.url) {
+        throw new Error('Checkout URL not provided');
       }
 
-      const { error: stripeError } = await stripe.redirectToCheckout({
-        sessionId: data.sessionId,
-      });
-
-      if (stripeError) {
-        throw new Error(stripeError.message);
-      }
+      window.location.href = data.url;
     } catch (err: any) {
       console.error('Checkout error:', err);
       setError(err.message || 'Something went wrong. Please try again.');

@@ -48,7 +48,7 @@ export class StorageFactory {
   }
 
   // Check what features are available
-  static getAvailableFeatures(subscription?: UserSubscription, gridId?: string): import('./types').FeatureFlags {
+  static getAvailableFeatures(subscription?: UserSubscription, gridId?: string): Promise<import('./types').FeatureFlags> | import('./types').FeatureFlags {
     return this.getInstance(subscription).getAvailableFeatures(subscription, gridId);
   }
 
@@ -70,7 +70,7 @@ export async function loadGrid(gridId: string): Promise<import('@/types').GridSt
   return provider.loadGrid(gridId);
 }
 
-export function getFeatures(subscription?: UserSubscription, gridId?: string): import('./types').FeatureFlags {
+export function getFeatures(subscription?: UserSubscription, gridId?: string): Promise<import('./types').FeatureFlags> | import('./types').FeatureFlags {
   return StorageFactory.getAvailableFeatures(subscription, gridId);
 }
 

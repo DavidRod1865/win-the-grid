@@ -191,6 +191,7 @@ export class LocalStorageProvider implements StorageProvider {
       // Premium features (require account + payment)
       canShare: false, // Requires account and payment
       hasRealTimeUpdates: false,
+      hasGameDayMode: false, // Premium feature - requires account and payment
       canSendNotifications: false,
       hasAnalytics: false,
 

@@ -138,7 +138,8 @@ async function handleSubscriptionCreated(subscription: Stripe.Subscription) {
     return;
   }
 
-  const expiresAt = new Date(subscription.current_period_end * 1000);
+  // Type assertion needed: current_period_end exists in API but missing from TS definitions in Stripe v20.2.0
+  const expiresAt = new Date((subscription as any).current_period_end * 1000);
 
   await supabase
     .from('user_subscriptions')
@@ -202,7 +203,7 @@ async function handlePaymentFailed(paymentIntent: Stripe.PaymentIntent) {
 
 export async function POST(req: NextRequest) {
   const body = await req.text();
-  const signature = headers().get('stripe-signature');
+  const signature = (await headers()).get('stripe-signature');
 
   if (!signature) {
     return NextResponse.json(
