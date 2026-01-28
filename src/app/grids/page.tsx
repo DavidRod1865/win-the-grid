@@ -1,8 +1,8 @@
 'use client';
 
 import { useAuth } from '@/contexts/AuthContext';
-import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { useEffect, useRef, useState } from 'react';
 import UserMenu from '@/components/ui/UserMenu';
 import Link from 'next/link';
 
@@ -19,9 +19,11 @@ interface GridSummary {
 export default function GridsPage() {
   const { user, loading } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [grids, setGrids] = useState<GridSummary[]>([]);
   const [loadingGrids, setLoadingGrids] = useState(true);
   const [creatingNewGrid, setCreatingNewGrid] = useState(false);
+  const hasAutoCreated = useRef(false);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -34,6 +36,16 @@ export default function GridsPage() {
       loadUserGrids();
     }
   }, [user]);
+
+  useEffect(() => {
+    if (!user || loading || hasAutoCreated.current) return;
+    if (searchParams.get('new') === '1') {
+      hasAutoCreated.current = true;
+      createNewGrid().finally(() => {
+        router.replace('/grids');
+      });
+    }
+  }, [user, loading, searchParams, router]);
 
   const createNewGrid = async () => {
     if (!user) return;

@@ -82,6 +82,7 @@ export default function GridPage() {
   const [showClearNamesConfirm, setShowClearNamesConfirm] = useState(false);
   const [showClearNumbersConfirm, setShowClearNumbersConfirm] = useState(false);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const [showGuestUpgradeBanner, setShowGuestUpgradeBanner] = useState(false);
   const [showSidePoolsModal, setShowSidePoolsModal] = useState(false);
   const [showAddCustomPool, setShowAddCustomPool] = useState(false);
   const [customPoolName, setCustomPoolName] = useState('');
@@ -115,6 +116,7 @@ export default function GridPage() {
   // Multiple grids support
   const [userGrids, setUserGrids] = useState<GridState[]>([]);
   const [showGridsDropdown, setShowGridsDropdown] = useState(false);
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
 
   // Grid page is for anonymous users only - always use localStorage
   
@@ -127,11 +129,16 @@ export default function GridPage() {
       action();
     } catch (error: any) {
       if (error.message.includes('requires')) {
-        setShowUpgradeModal(true);
+        promptGuestUpgrade();
       } else {
         console.error(`Failed to use ${featureName}:`, error);
       }
     }
+  };
+
+  const promptGuestUpgrade = () => {
+    setShowGuestUpgradeBanner(true);
+    setShowUpgradeModal(true);
   };
 
   useEffect(() => {
@@ -834,8 +841,8 @@ export default function GridPage() {
       <div className="relative z-10">
       <header className="bg-white/90 backdrop-blur-md border-b border-white/20 sticky top-0 z-40 shadow-lg">
         <div className="max-w-7xl mx-auto px-4 py-5">
-          <div className="flex justify-between items-center">
-            <div className="flex items-center gap-4">
+          <div className="flex justify-between items-center gap-4">
+            <div className="hidden md:flex items-center gap-4">
               <Link
                 href="/"
                 className="text-blue-600 hover:text-blue-800 font-medium transition-colors duration-200 flex items-center gap-2"
@@ -883,12 +890,33 @@ export default function GridPage() {
                 </div>
               )}
               {userGrids.length <= 1 && (
-                <h1 className="text-2xl font-bold text-gray-900">
-                  {gridState.title || 'Super Bowl LX'} Squares Calculator
-                </h1>
+                <div className="flex flex-col">
+                  <h1 className="text-2xl font-bold text-gray-900">
+                    Create &amp; Manage Grid (Guest)
+                  </h1>
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-gray-600">
+                    <span className="inline-flex items-center rounded-full bg-yellow-100 px-2 py-0.5 font-semibold text-yellow-800">
+                      Guest Mode
+                    </span>
+                    <Link href="/auth/signup" className="text-blue-600 hover:text-blue-800 font-medium">
+                      Sign in to save and share
+                    </Link>
+                  </div>
+                </div>
               )}
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 md:hidden min-w-0">
+              <span className="text-lg font-semibold text-gray-900 truncate">
+                Create &amp; Manage Grid (Guest)
+              </span>
+            </div>
+            <div className="hidden md:flex items-center gap-3">
+              <Link
+                href="/?join=1"
+                className="text-blue-600 hover:text-blue-800 font-medium transition-colors duration-200 hover:underline"
+              >
+                Enter Share Code
+              </Link>
               <Link
                 href="/how-to-play"
                 className="text-blue-600 hover:text-blue-800 font-medium transition-colors duration-200 hover:underline"
@@ -910,7 +938,7 @@ export default function GridPage() {
                     // TODO: Implement sharing functionality
                     console.log('Share grid clicked');
                   } else {
-                    setShowUpgradeModal(true);
+                    promptGuestUpgrade();
                   }
                 }}
                 className={`py-2 px-4 rounded-md font-medium transition-all duration-200 hover:shadow-lg text-sm ${
@@ -920,14 +948,14 @@ export default function GridPage() {
                 }`}
                 aria-label={features.canShare ? "Share grid with others" : "Sign up to share grid"}
               >
-                {features.canShare ? 'Share Grid' : 'Share (Sign Up)'}
+                {features.canShare ? 'Share Grid' : 'Share (Premium)'}
               </button>
               <button 
                 onClick={() => {
                   if (features.canExportExcel) {
                     exportToExcel(gridState);
                   } else {
-                    setShowUpgradeModal(true);
+                    promptGuestUpgrade();
                   }
                 }}
                 className={`py-2 px-4 rounded-md font-medium transition-all duration-200 hover:shadow-lg text-sm ${
@@ -957,12 +985,196 @@ export default function GridPage() {
                 </svg>
               </button>
             </div>
+            <button
+              onClick={() => setShowMobileMenu((prev) => !prev)}
+              className="md:hidden inline-flex items-center justify-center p-2 rounded-md bg-gray-100 hover:bg-gray-200 text-gray-700 transition-colors"
+              aria-label={showMobileMenu ? 'Close menu' : 'Open menu'}
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={showMobileMenu ? "M6 18L18 6M6 6l12 12" : "M4 6h16M4 12h16M4 18h16"} />
+              </svg>
+            </button>
           </div>
+          {showMobileMenu && (
+            <div className="md:hidden mt-4 pt-4 border-t border-white/30">
+              <div className="flex flex-col gap-3">
+                <Link
+                  href="/"
+                  onClick={() => setShowMobileMenu(false)}
+                  className="text-blue-600 hover:text-blue-800 font-medium transition-colors duration-200 flex items-center gap-2"
+                >
+                  Back to Home
+                </Link>
+                {userGrids.length > 1 && (
+                  <div className="relative grids-dropdown-container">
+                    <button
+                      onClick={() => setShowGridsDropdown(!showGridsDropdown)}
+                      className="flex items-center justify-between gap-2 px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-md font-medium text-sm text-gray-700 transition-colors w-full"
+                    >
+                      <span className="flex items-center gap-2">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                        </svg>
+                        {gridState.title || 'Super Bowl LX'}
+                      </span>
+                      <svg className={`w-4 h-4 transition-transform ${showGridsDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+                    {showGridsDropdown && (
+                      <div className="absolute top-full left-0 mt-2 w-full bg-white rounded-lg shadow-lg border border-gray-200 z-50 max-h-96 overflow-y-auto">
+                        <div className="p-2">
+                          <div className="px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wide border-b border-gray-200 mb-1">
+                            Your Grids ({userGrids.length})
+                          </div>
+                          {userGrids.map((grid) => (
+                            <button
+                              key={grid.id}
+                              onClick={() => {
+                                setShowMobileMenu(false);
+                                handleSwitchGrid(grid.id || '');
+                              }}
+                              className={`w-full text-left px-3 py-2 rounded-md hover:bg-gray-100 transition-colors ${
+                                grid.id === gridState.id ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-700'
+                              }`}
+                            >
+                              <div className="font-medium">{grid.title || 'Untitled Grid'}</div>
+                              <div className="text-xs text-gray-500 mt-0.5">
+                                {grid.boxes.filter(b => b.name.trim()).length} participants
+                                {grid.numbersGenerated && ' • Numbers generated'}
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+                {userGrids.length <= 1 && (
+                  <div className="text-sm font-semibold text-gray-700">
+                    {gridState.title || 'Super Bowl LX'} Squares Calculator
+                  </div>
+                )}
+                <Link
+                  href="/?join=1"
+                  onClick={() => setShowMobileMenu(false)}
+                  className="text-blue-600 hover:text-blue-800 font-medium transition-colors duration-200"
+                >
+                  Enter Share Code
+                </Link>
+                <Link
+                  href="/how-to-play"
+                  onClick={() => setShowMobileMenu(false)}
+                  className="text-blue-600 hover:text-blue-800 font-medium transition-colors duration-200"
+                >
+                  How to Play
+                </Link>
+                <a
+                  href="https://buymeacoffee.com"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-yellow-500 hover:bg-yellow-600 text-white rounded-md font-medium text-sm transition-all duration-200 hover:shadow-lg"
+                >
+                  <span className="text-base">☕</span>
+                  Coffee
+                </a>
+                <button 
+                  onClick={() => {
+                    setShowMobileMenu(false);
+                    if (features.canShare) {
+                      // TODO: Implement sharing functionality
+                      console.log('Share grid clicked');
+                    } else {
+                      promptGuestUpgrade();
+                    }
+                  }}
+                  className={`py-2 px-4 rounded-md font-medium transition-all duration-200 hover:shadow-lg text-sm ${
+                    features.canShare 
+                      ? 'bg-purple-600 hover:bg-purple-700 text-white' 
+                      : 'bg-gray-400 hover:bg-gray-500 text-white'
+                  }`}
+                  aria-label={features.canShare ? "Share grid with others" : "Sign up to share grid"}
+                >
+                  {features.canShare ? 'Share Grid' : 'Share (Premium)'}
+                </button>
+                <button 
+                  onClick={() => {
+                    setShowMobileMenu(false);
+                    if (features.canExportExcel) {
+                      exportToExcel(gridState);
+                    } else {
+                      promptGuestUpgrade();
+                    }
+                  }}
+                  className={`py-2 px-4 rounded-md font-medium transition-all duration-200 hover:shadow-lg text-sm ${
+                    features.canExportExcel 
+                      ? 'bg-green-600 hover:bg-green-700 text-white' 
+                      : 'bg-gray-400 hover:bg-gray-500 text-white'
+                  }`}
+                  aria-label={features.canExportExcel ? "Export grid to Excel file" : "Sign up to export to Excel"}
+                >
+                  {features.canExportExcel ? 'Export to Excel' : 'Excel (Premium)'}
+                </button>
+                <button 
+                  onClick={() => {
+                    setShowMobileMenu(false);
+                    generatePDF(gridState);
+                  }}
+                  className="py-2 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-md font-medium transition-all duration-200 hover:shadow-lg text-sm"
+                  aria-label="Generate and print PDF"
+                >
+                  Print PDF
+                </button>
+                <button 
+                  onClick={() => {
+                    setShowMobileMenu(false);
+                    setShowSettingsModal(true);
+                  }}
+                  className="p-2 rounded-md bg-gray-600 hover:bg-gray-700 text-white transition-all duration-200 hover:shadow-lg inline-flex items-center justify-center"
+                  aria-label="Open settings"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </header>
 
       <main className="w-full px-4 py-8">
-        <div className="space-y-8 max-w-7xl mx-auto">
+        <div className="max-w-7xl mx-auto space-y-4">
+          <div className="rounded-lg border border-yellow-200 bg-yellow-50 px-4 py-3 text-sm text-yellow-900 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-semibold text-yellow-800">
+                Guest Mode
+              </span>
+              <span>Save &amp; share requires a free account.</span>
+            </div>
+            <Link href="/auth/signup" className="text-yellow-900 font-semibold hover:underline">
+              Sign up free
+            </Link>
+          </div>
+          {showGuestUpgradeBanner && (
+            <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <span>Create a free account to save and share this grid.</span>
+              <div className="flex items-center gap-3">
+                <Link href="/auth/signup" className="font-semibold hover:underline">
+                  Sign up free
+                </Link>
+                <button
+                  onClick={() => setShowGuestUpgradeBanner(false)}
+                  className="text-blue-700 hover:text-blue-900"
+                >
+                  Dismiss
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+        <div className="space-y-8 max-w-7xl mx-auto mt-4">
           {/* Top Row: Game Settings, Grid Progress */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             
@@ -1613,7 +1825,7 @@ export default function GridPage() {
                   )}
                   {getCurrentGameState() === 'ready' && !features.hasGameDayMode && features.showUpgradePrompts && (
                     <button
-                      onClick={() => setShowUpgradeModal(true)}
+                      onClick={promptGuestUpgrade}
                       className="px-3 py-1 bg-gray-400 hover:bg-gray-500 text-white rounded-md text-xs font-medium transition-colors"
                     >
                       🏈 Game Day (Premium)
@@ -2039,7 +2251,7 @@ export default function GridPage() {
                   <svg className="w-5 h-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                   </svg>
-                  <span className="text-sm text-gray-700">Share grids with join codes</span>
+                  <span className="text-sm text-gray-700">Share grids with share codes</span>
                 </div>
                 <div className="flex items-center gap-3">
                   <svg className="w-5 h-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
@@ -2084,6 +2296,12 @@ export default function GridPage() {
                   Sign Up Free
                 </button>
               </div>
+              <button
+                onClick={() => setShowUpgradeModal(false)}
+                className="mt-3 text-xs text-gray-500 hover:text-gray-700 underline"
+              >
+                Continue as Guest (local-only)
+              </button>
               
               <p className="text-xs text-gray-500 mt-4">
                 No credit card required • Import your current grid • 2 minute setup

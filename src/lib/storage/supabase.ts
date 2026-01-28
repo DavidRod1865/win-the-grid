@@ -274,13 +274,68 @@ export class SupabaseProvider implements StorageProvider {
   }
 
   async subscribeToGridUpdates(gridId: string, callback: (grid: GridState) => void): Promise<() => void> {
-    // TODO: Implement real-time subscriptions
-    throw new Error('Supabase integration not yet implemented. API keys needed.');
+    const channel = this.supabase
+      .channel(`grid:${gridId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'grids',
+          filter: `id=eq.${gridId}`,
+        },
+        async (payload) => {
+          if (payload.eventType === 'UPDATE' && payload.new) {
+            // Load the full grid state after update
+            const grid = await this.loadGrid(gridId);
+            if (grid) {
+              callback(grid);
+            }
+          }
+        }
+      )
+      .subscribe();
+
+    // Return unsubscribe function
+    return () => {
+      this.supabase.removeChannel(channel);
+    };
   }
 
   async getUserSubscription(): Promise<UserSubscription | null> {
-    // TODO: Implement subscription lookup from Supabase
-    throw new Error('Supabase integration not yet implemented. API keys needed.');
+    try {
+      const { data: { user }, error: authError } = await this.supabase.auth.getUser();
+      if (authError || !user) {
+        return null;
+      }
+
+      const { data, error } = await this.supabase
+        .from('user_subscriptions')
+        .select('*')
+        .eq('user_id', user.id)
+        .single();
+
+      if (error || !data) {
+        // Return default free subscription if none exists
+        return {
+          userId: user.id,
+          tier: 'free',
+          paymentStatus: 'free',
+          seasonPassActive: false,
+        };
+      }
+
+      return {
+        userId: data.user_id,
+        tier: data.season_pass_active ? 'paid' : 'free',
+        paymentStatus: data.season_pass_active ? 'season-pass' : 'free',
+        seasonPassActive: data.season_pass_active,
+        seasonPassExpiry: data.season_pass_expires_at,
+      };
+    } catch (error) {
+      console.error('Error fetching user subscription:', error);
+      return null;
+    }
   }
 
   async updateSubscription(subscription: UserSubscription): Promise<void> {
@@ -289,29 +344,73 @@ export class SupabaseProvider implements StorageProvider {
   }
 
   async recordPayment(transaction: PaymentTransaction): Promise<void> {
-    // TODO: Implement payment recording in Supabase
-    throw new Error('Supabase integration not yet implemented. API keys needed.');
+    try {
+      await this.supabase
+        .from('payments')
+        .insert({
+          user_id: transaction.userId,
+          grid_id: transaction.gridId,
+          amount: transaction.amount,
+          currency: transaction.currency,
+          stripe_payment_intent_id: transaction.stripePaymentIntentId,
+          status: transaction.status,
+          payment_type: transaction.type,
+        });
+    } catch (error) {
+      console.error('Error recording payment:', error);
+      throw error;
+    }
   }
 
-  getAvailableFeatures(subscription?: UserSubscription, gridId?: string): FeatureFlags {
-    // Supabase provider = has account, so all features available (free, but requires account)
-    // If no subscription provided, user doesn't have account yet
+  async getAvailableFeatures(subscription?: UserSubscription, gridId?: string): Promise<FeatureFlags> {
     const hasAccount = !!subscription;
-    
+
+    // Check if user has active season pass
+    const hasSeasonPass = subscription?.seasonPassActive &&
+      subscription.seasonPassExpiry &&
+      new Date(subscription.seasonPassExpiry) > new Date();
+
+    // Check if specific grid is premium
+    let gridIsPremium = false;
+    if (gridId) {
+      try {
+        const { data: grid } = await this.supabase
+          .from('grids')
+          .select('is_premium')
+          .eq('id', gridId)
+          .single();
+
+        gridIsPremium = grid?.is_premium || false;
+      } catch (error) {
+        console.error('Error checking grid premium status:', error);
+      }
+    }
+
+    const isPremium = hasSeasonPass || gridIsPremium;
+
     return {
+      // Basic features (always free for authenticated users)
       canCreateGrid: true,
       canEditGrid: true,
       canExportPDF: true,
-      canExportExcel: true,        // Free
-      canSaveToCloud: true,
-      canShare: hasAccount,        // Free, but requires account
-      hasGameDayMode: true,        // Free
-      hasRealTimeUpdates: true,    // Free
-      hasLiveScoring: true,        // Free
-      canCreateMultipleGrids: true, // Free
-      
-      showUpgradePrompts: false,   // No upgrade prompts needed
-      requiresPayment: false       // No payments required
+      canExportExcel: true,
+      canSaveToCloud: hasAccount,
+
+      // Premium features (require payment)
+      canShare: isPremium,
+      hasRealTimeUpdates: isPremium,
+      canSendNotifications: isPremium,
+      hasAnalytics: isPremium,
+
+      // Season pass only
+      canCustomizeBranding: hasSeasonPass,
+
+      // Limits
+      maxGridsPerMonth: hasSeasonPass ? Infinity : 10,
+
+      // UI hints
+      showUpgradePrompts: !hasSeasonPass && hasAccount,
+      currentPlan: hasSeasonPass ? 'season-pass' : (gridIsPremium ? 'per-grid' : 'free'),
     };
   }
 

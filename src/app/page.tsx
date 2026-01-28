@@ -1,13 +1,33 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import UserMenu from '@/components/ui/UserMenu';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function LandingPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const { user } = useAuth();
   const [isHovered, setIsHovered] = useState(false);
   const [showGridCodeModal, setShowGridCodeModal] = useState(false);
   const [gridCode, setGridCode] = useState('');
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
+
+  useEffect(() => {
+    if (searchParams.get('join') === '1') {
+      setShowGridCodeModal(true);
+    }
+  }, [searchParams]);
+
+  const handleStartGrid = () => {
+    if (user) {
+      router.push('/grids?new=1');
+    } else {
+      router.push('/grid');
+    }
+  };
 
   return (
     <div className="min-h-screen relative">
@@ -29,12 +49,45 @@ export default function LandingPage() {
       {/* Header */}
       <header className="bg-white/90 backdrop-blur-md border-b border-white/20 sticky top-0 z-40 shadow-lg">
         <div className="max-w-7xl mx-auto px-4 py-4">
-          <div className="flex justify-between items-center">
+          <div className="flex justify-between items-center gap-4">
             <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
               🏈 Win The Grid
             </h1>
-            <UserMenu />
+            <div className="hidden md:flex items-center gap-4">
+              <button
+                onClick={() => setShowGridCodeModal(true)}
+                className="text-blue-600 hover:text-blue-800 font-medium transition-colors duration-200"
+              >
+                Enter Share Code
+              </button>
+              <UserMenu />
+            </div>
+            <button
+              onClick={() => setShowMobileMenu((prev) => !prev)}
+              className="md:hidden inline-flex items-center justify-center p-2 rounded-md bg-gray-100 hover:bg-gray-200 text-gray-700 transition-colors"
+              aria-label={showMobileMenu ? 'Close menu' : 'Open menu'}
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={showMobileMenu ? "M6 18L18 6M6 6l12 12" : "M4 6h16M4 12h16M4 18h16"} />
+              </svg>
+            </button>
           </div>
+          {showMobileMenu && (
+            <div className="md:hidden mt-4 pt-4 border-t border-white/30">
+              <div className="flex flex-col gap-3">
+                <button
+                  onClick={() => {
+                    setShowMobileMenu(false);
+                    setShowGridCodeModal(true);
+                  }}
+                  className="text-blue-600 hover:text-blue-800 font-medium transition-colors duration-200 text-left"
+                >
+                  Enter Share Code
+                </button>
+                <UserMenu />
+              </div>
+            </div>
+          )}
         </div>
       </header>
 
@@ -50,21 +103,43 @@ export default function LandingPage() {
             Create, manage, and share your football squares pool in minutes. No spreadsheets. No headaches. Just fun.
           </p>
           
-          <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-12">
-            <Link
-              href="/grid"
+          <div className="flex flex-col gap-6 items-center mb-12">
+            <button
+              onClick={handleStartGrid}
               className="px-8 py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold text-lg transition-all duration-200 hover:shadow-xl transform hover:scale-105 rainbow-shadow"
               onMouseEnter={() => setIsHovered(true)}
               onMouseLeave={() => setIsHovered(false)}
             >
-              Create Free Grid
-            </Link>
-            <button
-              onClick={() => setShowGridCodeModal(true)}
-              className="px-8 py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold text-lg transition-all duration-200 hover:shadow-xl transform hover:scale-105 rainbow-shadow"
-            >
-              Got a Grid Code?
+              Start a Grid
             </button>
+            <div className="w-full max-w-md">
+              <div className="text-sm font-semibold text-white mb-2">Join a grid with a share code</div>
+              <div className="flex flex-col sm:flex-row gap-3">
+                <input
+                  type="text"
+                  value={gridCode}
+                  onChange={(e) => setGridCode(e.target.value.toUpperCase())}
+                  placeholder="Enter 6-character share code"
+                  maxLength={6}
+                  className="flex-1 px-4 py-3 rounded-md border border-white/40 bg-white/90 text-black font-mono tracking-widest text-center focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  aria-label="Enter share code"
+                />
+                <button
+                  onClick={() => {
+                    if (gridCode.length === 6) {
+                      window.location.href = `/grid?code=${gridCode}`;
+                    }
+                  }}
+                  disabled={gridCode.length !== 6}
+                  className="px-5 py-3 bg-white text-blue-700 rounded-md font-semibold disabled:opacity-60 disabled:cursor-not-allowed hover:bg-blue-50 transition-colors"
+                >
+                  View Grid
+                </button>
+              </div>
+              <div className="text-xs text-white/80 mt-2">
+                Enter the 6-character share code provided by the grid creator.
+              </div>
+            </div>
             <style dangerouslySetInnerHTML={{__html: `
               .rainbow-shadow {
                 position: relative;
@@ -176,12 +251,12 @@ export default function LandingPage() {
           <p className="text-xl mb-8 opacity-90">
             Start your free grid now. No credit card. No commitment. Just squares.
           </p>
-          <Link
-            href="/grid"
+          <button
+            onClick={handleStartGrid}
             className="inline-block px-8 py-4 bg-white text-blue-600 rounded-lg font-bold text-lg transition-all duration-200 hover:shadow-2xl transform hover:scale-105"
           >
-            Create Your Grid →
-          </Link>
+            Start a Grid →
+          </button>
         </div>
       </main>
 
@@ -192,6 +267,9 @@ export default function LandingPage() {
           <div className="flex justify-center items-center gap-6 mb-4">
             <Link href="/how-to-play" className="hover:text-white transition-colors text-sm">
               How to Play
+            </Link>
+            <Link href="/?join=1" className="hover:text-white transition-colors text-sm">
+              Have a share code? Join a grid
             </Link>
             <Link href="/grid" className="hover:text-white transition-colors text-sm">
               Privacy
@@ -213,16 +291,16 @@ export default function LandingPage() {
       </footer>
       </div>
 
-      {/* Grid Code Modal */}
+      {/* Share Code Modal */}
       {showGridCodeModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setShowGridCodeModal(false)}>
           <div className="bg-white rounded-lg shadow-xl p-6 max-w-md mx-4 w-full" onClick={(e) => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-xl font-semibold text-black">Enter Grid Code</h3>
+              <h3 className="text-xl font-semibold text-black">Enter Share Code</h3>
               <button
                 onClick={() => setShowGridCodeModal(false)}
                 className="text-gray-400 hover:text-gray-600 text-2xl leading-none"
-                aria-label="Close grid code modal"
+                aria-label="Close share code modal"
               >
                 ×
               </button>
@@ -231,19 +309,19 @@ export default function LandingPage() {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Grid Code
+                  Share Code
                 </label>
                 <input
                   type="text"
                   value={gridCode}
                   onChange={(e) => setGridCode(e.target.value.toUpperCase())}
-                  placeholder="Enter 6-character code"
+                  placeholder="Enter 6-character share code"
                   maxLength={6}
                   className="w-full px-4 py-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-black text-lg font-mono tracking-widest text-center"
                   autoFocus
                 />
                 <p className="text-xs text-gray-500 mt-2">
-                  Enter the 6-character code provided by the grid creator
+                  Enter the 6-character share code provided by the grid creator
                 </p>
               </div>
               
@@ -260,7 +338,7 @@ export default function LandingPage() {
                 <button
                   onClick={() => {
                     if (gridCode.length === 6) {
-                      // TODO: Implement grid code lookup and navigation
+                      // TODO: Implement share code lookup and navigation
                       console.log('Grid code entered:', gridCode);
                       // Navigate to grid view with code
                       window.location.href = `/grid?code=${gridCode}`;

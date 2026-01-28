@@ -175,7 +175,7 @@ export default function MigrationPreview({ onContinue, onSkip, className = '' }:
           </li>
           <li className="flex items-center text-amber-700">
             <span className="text-blue-500 mr-2">✨</span>
-            Grid sharing with join codes
+            Grid sharing with share codes
           </li>
           <li className="flex items-center text-amber-700">
             <span className="text-blue-500 mr-2">✨</span>

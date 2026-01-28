@@ -4,6 +4,9 @@ import { use, useState, useEffect } from 'react';
 import Link from 'next/link';
 import { GridState } from '@/types';
 import { SupabaseProvider } from '@/lib/storage';
+import { useGridRealtime } from '@/hooks/useGridRealtime';
+import { analytics } from '@/lib/analytics';
+import { supabase } from '@/lib/supabase';
 
 interface SharePageProps {
   params: Promise<{
@@ -16,6 +19,7 @@ export default function SharePage({ params }: SharePageProps) {
   const [gridState, setGridState] = useState<GridState | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
 
   useEffect(() => {
     const loadSharedGrid = async () => {
@@ -26,7 +30,7 @@ export default function SharePage({ params }: SharePageProps) {
         const grid = await supabaseProvider.getGridByJoinCode(joinCode);
 
         if (!grid) {
-          throw new Error('Grid not found or join code expired');
+          throw new Error('Grid not found or share code expired');
         }
 
         // Mark as view-only
@@ -38,6 +42,25 @@ export default function SharePage({ params }: SharePageProps) {
 
         setGridState(viewOnlyGrid);
 
+        // Track grid view
+        analytics.gridViewed(grid.id!, false, joinCode);
+
+        // Record view in database for analytics
+        if (grid.id) {
+          try {
+            // Create a simple hash of IP for privacy (using a random identifier for now)
+            const viewerHash = crypto.randomUUID();
+
+            await supabase.from('grid_views').insert({
+              grid_id: grid.id,
+              viewer_ip_hash: viewerHash,
+            });
+          } catch (viewError) {
+            console.error('Failed to track view:', viewError);
+            // Don't fail the whole page load if view tracking fails
+          }
+        }
+
       } catch (err) {
         console.error('Failed to load shared grid:', err);
         setError(err instanceof Error ? err.message : 'Failed to load grid');
@@ -48,6 +71,20 @@ export default function SharePage({ params }: SharePageProps) {
 
     loadSharedGrid();
   }, [joinCode]);
+
+  // Real-time updates for premium grids
+  useGridRealtime(
+    gridState?.id,
+    (updatedData) => {
+      if (gridState) {
+        setGridState({
+          ...gridState,
+          ...updatedData,
+        });
+      }
+    },
+    gridState?.ownership?.isPremium || false
+  );
 
   const getWinningBoxes = (): number[] => {
     if (!gridState?.gameWinners || !gridState.numbersGenerated) return [];
@@ -134,14 +171,26 @@ export default function SharePage({ params }: SharePageProps) {
         {/* Header */}
         <header className="bg-white/90 backdrop-blur-md border-b border-white/20 sticky top-0 z-40 shadow-lg">
           <div className="max-w-7xl mx-auto px-4 py-5">
-            <div className="flex items-center justify-between">
-              <div>
+            <div className="flex items-center justify-between gap-4">
+              <div className="hidden md:block">
                 <h1 className="text-2xl font-bold text-gray-900">
                   {gridState.title || 'Super Bowl LX'}
                 </h1>
                 <p className="text-gray-600 text-sm mt-1">Shared Grid - View Only</p>
               </div>
-              <div className="flex items-center gap-3">
+              <div className="md:hidden min-w-0">
+                <h1 className="text-lg font-bold text-gray-900 truncate">
+                  {gridState.title || 'Super Bowl LX'}
+                </h1>
+                <p className="text-xs text-gray-600">Shared Grid - View Only</p>
+              </div>
+              <div className="hidden md:flex items-center gap-3">
+                <Link
+                  href="/?join=1"
+                  className="text-blue-600 hover:text-blue-800 font-medium transition-colors"
+                >
+                  Enter Share Code
+                </Link>
                 <Link
                   href="/auth/signup"
                   className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md font-medium transition-colors"
@@ -155,12 +204,56 @@ export default function SharePage({ params }: SharePageProps) {
                   Create Your Own
                 </Link>
               </div>
+              <button
+                onClick={() => setShowMobileMenu((prev) => !prev)}
+                className="md:hidden inline-flex items-center justify-center p-2 rounded-md bg-gray-100 hover:bg-gray-200 text-gray-700 transition-colors"
+                aria-label={showMobileMenu ? 'Close menu' : 'Open menu'}
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={showMobileMenu ? "M6 18L18 6M6 6l12 12" : "M4 6h16M4 12h16M4 18h16"} />
+                </svg>
+              </button>
             </div>
+            {showMobileMenu && (
+              <div className="md:hidden mt-4 pt-4 border-t border-white/30">
+                <div className="flex flex-col gap-3">
+                <Link
+                  href="/?join=1"
+                  onClick={() => setShowMobileMenu(false)}
+                  className="text-blue-600 hover:text-blue-800 font-medium transition-colors text-center"
+                >
+                  Enter Share Code
+                </Link>
+                  <Link
+                    href="/auth/signup"
+                    onClick={() => setShowMobileMenu(false)}
+                    className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md font-medium transition-colors text-center"
+                  >
+                    Sign Up Free
+                  </Link>
+                  <Link
+                    href="/"
+                    onClick={() => setShowMobileMenu(false)}
+                    className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-md font-medium transition-colors text-center"
+                  >
+                    Create Your Own
+                  </Link>
+                </div>
+              </div>
+            )}
           </div>
         </header>
 
         {/* Main Content */}
         <main className="max-w-7xl mx-auto px-4 py-8">
+          <div className="mb-6 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+            <span>
+              View Only: this shared grid can’t be edited here.
+            </span>
+            <Link href="/" className="font-semibold text-blue-700 hover:underline">
+              Create your own grid
+            </Link>
+          </div>
           {/* Stats Card */}
           <div className="bg-white/90 backdrop-blur-md rounded-lg shadow-lg p-6 mb-6 border border-white/20">
 
@@ -348,6 +441,19 @@ export default function SharePage({ params }: SharePageProps) {
             </div>
           )}
         </div>
+
+          <div className="bg-white/90 backdrop-blur-md rounded-lg shadow-lg p-4 mb-6 border border-white/20 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div>
+              <div className="text-sm font-semibold text-gray-900">Want your own grid?</div>
+              <div className="text-sm text-gray-600">Create a free grid and share it with your group.</div>
+            </div>
+            <Link
+              href="/"
+              className="inline-flex items-center justify-center rounded-md bg-blue-600 px-4 py-2 text-white font-semibold hover:bg-blue-700 transition-colors"
+            >
+              Create your own grid
+            </Link>
+          </div>
 
           {/* Advertisement - Create Your Own Grid */}
           <div className="bg-white/90 backdrop-blur-md rounded-lg shadow-lg p-8 border border-white/20">

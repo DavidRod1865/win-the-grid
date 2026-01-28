@@ -20,27 +20,32 @@ export interface StorageProvider {
   recordPayment?(transaction: PaymentTransaction): Promise<void>;
   
   // Feature availability (now subscription-aware)
-  getAvailableFeatures(subscription?: UserSubscription, gridId?: string): FeatureFlags;
+  getAvailableFeatures(subscription?: UserSubscription, gridId?: string): Promise<FeatureFlags> | FeatureFlags;
 }
 
 export interface FeatureFlags {
-  // Basic features
+  // Basic features (always free)
   canCreateGrid: boolean;
   canEditGrid: boolean;
   canExportPDF: boolean;
+  canExportExcel: boolean;
   canSaveToCloud: boolean; // Account vs localStorage
-  
+
   // Premium features (require payment)
   canShare: boolean;
-  canExportExcel: boolean;
-  hasGameDayMode: boolean;
   hasRealTimeUpdates: boolean;
-  hasLiveScoring: boolean;
-  canCreateMultipleGrids: boolean;
-  
+  canSendNotifications: boolean;
+  hasAnalytics: boolean;
+
+  // Season pass only
+  canCustomizeBranding: boolean;
+
+  // Limits
+  maxGridsPerMonth: number;
+
   // UI hints
   showUpgradePrompts: boolean;
-  requiresPayment: boolean;
+  currentPlan: 'free' | 'per-grid' | 'season-pass';
 }
 
 export enum StorageType {

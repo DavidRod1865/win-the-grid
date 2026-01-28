@@ -179,21 +179,30 @@ export class LocalStorageProvider implements StorageProvider {
   }
 
   getAvailableFeatures(_subscription?: UserSubscription, _gridId?: string): FeatureFlags {
-    // localStorage = no account, so sharing requires signup
+    // localStorage = no account, so sharing requires signup and payment
     return {
+      // Basic features (always free)
       canCreateGrid: true,
       canEditGrid: true,
       canExportPDF: true,
-      canExportExcel: true,        // Free
-      canSaveToCloud: false,       // localStorage only
-      canShare: false,             // Requires account (but free once you have one)
-      hasGameDayMode: true,        // Free
-      hasRealTimeUpdates: true,    // Free
-      hasLiveScoring: true,        // Free
-      canCreateMultipleGrids: true, // Free
-      
-      showUpgradePrompts: false,   // No upgrade prompts needed
-      requiresPayment: false       // No payments required
+      canExportExcel: true,
+      canSaveToCloud: false, // localStorage only
+
+      // Premium features (require account + payment)
+      canShare: false, // Requires account and payment
+      hasRealTimeUpdates: false,
+      canSendNotifications: false,
+      hasAnalytics: false,
+
+      // Season pass only
+      canCustomizeBranding: false,
+
+      // Limits
+      maxGridsPerMonth: Infinity, // No limit for local storage
+
+      // UI hints
+      showUpgradePrompts: false, // Don't show until they have an account
+      currentPlan: 'free',
     };
   }
 

@@ -8,6 +8,7 @@ export default function HowToPlay() {
   const [isGridCodeSectionOpen, setIsGridCodeSectionOpen] = useState(false);
   const [isPricingSectionOpen, setIsPricingSectionOpen] = useState(false);
   const [isSquaresSectionOpen, setIsSquaresSectionOpen] = useState(false);
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
 
   return (
     <div className="min-h-screen relative flex flex-col">
@@ -28,17 +29,57 @@ export default function HowToPlay() {
       <div className="relative z-10 flex flex-col flex-grow">
       <header className="bg-white/90 backdrop-blur-md border-b border-white/20 sticky top-0 z-40 shadow-lg">
         <div className="max-w-7xl mx-auto px-4 py-4">
-          <div className="flex justify-between items-center">
-            <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+          <div className="flex justify-between items-center gap-4">
+            <h1 className="hidden md:flex text-2xl font-bold text-gray-900 items-center gap-2">
               🏈 Win The Grid - How to Play Football Squares
             </h1>
-            <Link
-              href="/"
-              className="text-blue-600 hover:text-blue-800 font-medium transition-colors duration-200"
+            <h1 className="md:hidden text-lg font-bold text-gray-900 truncate">
+              🏈 How to Play
+            </h1>
+            <div className="hidden md:flex items-center gap-4">
+              <Link
+                href="/?join=1"
+                className="text-blue-600 hover:text-blue-800 font-medium transition-colors duration-200"
+              >
+                Enter Share Code
+              </Link>
+              <Link
+                href="/"
+                className="text-blue-600 hover:text-blue-800 font-medium transition-colors duration-200"
+              >
+                Back to Home
+              </Link>
+            </div>
+            <button
+              onClick={() => setShowMobileMenu((prev) => !prev)}
+              className="md:hidden inline-flex items-center justify-center p-2 rounded-md bg-gray-100 hover:bg-gray-200 text-gray-700 transition-colors"
+              aria-label={showMobileMenu ? 'Close menu' : 'Open menu'}
             >
-              Back to Home
-            </Link>
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={showMobileMenu ? "M6 18L18 6M6 6l12 12" : "M4 6h16M4 12h16M4 18h16"} />
+              </svg>
+            </button>
           </div>
+          {showMobileMenu && (
+            <div className="md:hidden mt-4 pt-4 border-t border-white/30">
+              <div className="flex flex-col gap-3">
+                <Link
+                  href="/?join=1"
+                  onClick={() => setShowMobileMenu(false)}
+                  className="text-blue-600 hover:text-blue-800 font-medium transition-colors duration-200"
+                >
+                  Enter Share Code
+                </Link>
+                <Link
+                  href="/"
+                  onClick={() => setShowMobileMenu(false)}
+                  className="text-blue-600 hover:text-blue-800 font-medium transition-colors duration-200"
+                >
+                  Back to Home
+                </Link>
+              </div>
+            </div>
+          )}
         </div>
       </header>
 
@@ -109,20 +150,20 @@ export default function HowToPlay() {
                 <ul className="list-disc list-inside space-y-2 text-gray-700">
                   <li>Export your grid to Excel for easy sharing and record-keeping</li>
                   <li>Print or save as PDF to share with participants</li>
-                  <li>Use grid codes to share your pool with others (requires a free account)</li>
+                  <li>Use share codes to share your pool with others (requires a free account)</li>
                 </ul>
               </div>
               </div>
             </div>
           </div>
 
-          {/* Got a Grid Code? Section */}
+          {/* Got a Share Code? Section */}
           <div className="bg-white/95 backdrop-blur-sm rounded-lg shadow-2xl border border-white/20 overflow-hidden">
             <button
               onClick={() => setIsGridCodeSectionOpen(!isGridCodeSectionOpen)}
               className="w-full flex items-center justify-between p-6 text-left hover:bg-white/50 transition-colors"
             >
-              <h2 className="text-2xl font-bold text-gray-900">Got a Grid Code?</h2>
+              <h2 className="text-2xl font-bold text-gray-900">Got a Share Code?</h2>
               <svg
                 className={`w-6 h-6 text-gray-500 transition-transform duration-200 ${isGridCodeSectionOpen ? 'rotate-180' : ''}`}
                 fill="none"
@@ -136,18 +177,18 @@ export default function HowToPlay() {
             <div className={`overflow-hidden transition-all duration-300 ${isGridCodeSectionOpen ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'}`}>
               <div className="px-6 pb-6 space-y-6">
               <div>
-                <h3 className="text-xl font-semibold text-gray-900 mb-3">What is a Grid Code?</h3>
+                <h3 className="text-xl font-semibold text-gray-900 mb-3">What is a Share Code?</h3>
                 <p className="text-gray-700 leading-relaxed mb-4">
-                  A Grid Code is a unique 6-character identifier that allows you to view and join an existing Football Squares pool. 
-                  If someone has shared a grid code with you, you can use it to access their pool and see the current state of the game.
+                  A Share Code is a unique 6-character identifier that allows you to view and join an existing Football Squares pool. 
+                  If someone has shared a share code with you, you can use it to access their pool and see the current state of the game.
                 </p>
               </div>
 
               <div>
-                <h3 className="text-xl font-semibold text-gray-900 mb-3">How to Use a Grid Code</h3>
+                <h3 className="text-xl font-semibold text-gray-900 mb-3">How to Use a Share Code</h3>
                 <ul className="list-disc list-inside space-y-2 text-gray-700">
-                  <li>From the home page, click the "Got a Grid Code?" button</li>
-                  <li>Enter the 6-character code provided by the grid creator</li>
+                  <li>From the home page, enter the share code in the join field</li>
+                  <li>Enter the 6-character share code provided by the grid creator</li>
                   <li>Click "View Grid" to access the pool</li>
                   <li>You'll be able to see the grid, participants, and current game state</li>
                   <li>Note: You may have view-only access depending on the pool settings</li>
@@ -155,21 +196,21 @@ export default function HowToPlay() {
               </div>
 
               <div>
-                <h3 className="text-xl font-semibold text-gray-900 mb-3">Getting a Grid Code</h3>
+                <h3 className="text-xl font-semibold text-gray-900 mb-3">Getting a Share Code</h3>
                 <p className="text-gray-700 leading-relaxed mb-3">
                   If you're the grid creator and want to share your pool:
                 </p>
                 <ul className="list-disc list-inside space-y-2 text-gray-700">
-                  <li>Grid codes are automatically generated when you create a new grid</li>
-                  <li>You can find your grid code in the grid settings or share options</li>
+                  <li>Share codes are automatically generated when you create a new grid</li>
+                  <li>You can find your share code in the grid settings or share options</li>
                   <li>Share the code with participants so they can view or join your pool</li>
-                  <li>Grid codes are case-insensitive and easy to share via text, email, or social media</li>
+                  <li>Share codes are case-insensitive and easy to share via text, email, or social media</li>
                 </ul>
               </div>
 
               <div className="bg-blue-50 p-4 rounded-lg">
                 <p className="text-gray-800 text-sm">
-                  <strong>Tip:</strong> Keep your grid code safe and only share it with people you want to have access to your pool. 
+                  <strong>Tip:</strong> Keep your share code safe and only share it with people you want to have access to your pool. 
                   Anyone with the code can view your grid.
                 </p>
               </div>

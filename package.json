@@ -9,14 +9,17 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@stripe/stripe-js": "^8.6.4",
     "@supabase/auth-helpers-nextjs": "^0.15.0",
     "@supabase/supabase-js": "^2.90.0",
     "file-saver": "^2.0.5",
     "html2canvas": "^1.4.1",
     "jspdf": "^3.0.4",
     "next": "16.1.1",
+    "posthog-js": "^1.335.4",
     "react": "19.2.3",
     "react-dom": "19.2.3",
+    "stripe": "^20.2.0",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
