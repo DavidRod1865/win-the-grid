@@ -53,7 +53,6 @@ export class SupabaseProvider implements StorageProvider {
         state: supabaseData.state,
         is_premium: supabaseData.is_premium,
         payment_type: supabaseData.payment_type,
-        is_public: false,
         live_scoring_enabled: false
       })
       .select('id')
@@ -65,27 +64,7 @@ export class SupabaseProvider implements StorageProvider {
     }
 
     const gridId = gridData.id;
-    
-    // Log successful migration
-    try {
-      await this.supabase
-        .from('grid_activity_log')
-        .insert({
-          grid_id: gridId,
-          user_id: user.id,
-          activity_type: 'grid_migrated',
-          activity_data: {
-            source: 'localStorage',
-            participant_count: Object.keys(supabaseData.participants).length,
-            had_numbers: supabaseData.numbers_generated,
-            had_winners: supabaseData.winners.length > 0
-          }
-        });
-    } catch (logError) {
-      // Log migration activity is not critical - don't fail the migration
-      console.warn('Failed to log migration:', logError);
-    }
-    
+
     return gridId;
   }
 
@@ -205,7 +184,7 @@ export class SupabaseProvider implements StorageProvider {
       // Check if grid already has a join code
       const { data: existingGrid, error: fetchError } = await this.supabase
         .from('grids')
-        .select('join_code')
+        .select('share_code')
         .eq('id', gridId)
         .eq('created_by', user.id)
         .single();
@@ -214,7 +193,7 @@ export class SupabaseProvider implements StorageProvider {
         throw new Error(`Failed to fetch grid: ${fetchError.message}`);
       }
 
-      let joinCode = existingGrid.join_code;
+      let joinCode = existingGrid.share_code;
 
       // Generate join code if not exists
       if (!joinCode) {
@@ -223,8 +202,7 @@ export class SupabaseProvider implements StorageProvider {
         const { error: updateError } = await this.supabase
           .from('grids')
           .update({
-            join_code: joinCode,
-            is_public: true
+            share_code: joinCode
           })
           .eq('id', gridId)
           .eq('created_by', user.id);
@@ -247,8 +225,8 @@ export class SupabaseProvider implements StorageProvider {
       const { data, error } = await this.supabase
         .from('grids')
         .select('*')
-        .eq('join_code', joinCode.toUpperCase())
-        .eq('is_public', true)
+        .eq('share_code', joinCode.toUpperCase())
+        .eq('is_premium', true)
         .single();
 
       if (error) {
@@ -566,8 +544,8 @@ export class SupabaseProvider implements StorageProvider {
         id: supabaseGrid.id,
         ownerId: supabaseGrid.created_by,
         createdAt: supabaseGrid.created_at,
-        isPublic: Boolean(supabaseGrid.is_public),
-        joinCode: supabaseGrid.join_code,
+        isPublic: Boolean(supabaseGrid.is_premium && supabaseGrid.share_code),
+        joinCode: supabaseGrid.share_code,
         isPremium: Boolean(supabaseGrid.is_premium),
         paymentType: supabaseGrid.payment_type || 'free'
       },

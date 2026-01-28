@@ -81,15 +81,34 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
 
     console.log('Grid unlocked:', { grid_id, share_code: shareCode });
 
-    // Update user subscription stats
-    await supabase.rpc('increment_grids_purchased', {
-      p_user_id: user_id,
-      p_amount: parseFloat(amount),
-    });
+    // Update user subscription stats - increment grids purchased and total spent
+    const { data: currentSubscription } = await supabase
+      .from('user_subscriptions')
+      .select('grids_purchased_count, total_spent')
+      .eq('user_id', user_id)
+      .single();
+
+    if (currentSubscription) {
+      await supabase
+        .from('user_subscriptions')
+        .update({
+          grids_purchased_count: (currentSubscription.grids_purchased_count || 0) + 1,
+          total_spent: parseFloat(((currentSubscription.total_spent || 0) + parseFloat(amount)).toFixed(2)),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('user_id', user_id);
+    }
   } else if (product_type === 'season-pass') {
     // Activate season pass
     const expiresAt = new Date();
     expiresAt.setMonth(expiresAt.getMonth() + 6); // 6 months from now
+
+    // Get current subscription to increment total_spent
+    const { data: currentSubscription } = await supabase
+      .from('user_subscriptions')
+      .select('total_spent')
+      .eq('user_id', user_id)
+      .single();
 
     await supabase
       .from('user_subscriptions')
@@ -97,7 +116,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
         season_pass_active: true,
         season_pass_expires_at: expiresAt.toISOString(),
         stripe_subscription_id: session.subscription as string,
-        total_spent: supabase.rpc('increment', { amount: parseFloat(amount) }),
+        total_spent: parseFloat(((currentSubscription?.total_spent || 0) + parseFloat(amount)).toFixed(2)),
         updated_at: new Date().toISOString(),
       })
       .eq('user_id', user_id);
@@ -220,10 +239,11 @@ export async function POST(req: NextRequest) {
       signature,
       process.env.STRIPE_WEBHOOK_SECRET!
     );
-  } catch (error: any) {
-    console.error('Webhook signature verification failed:', error.message);
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error('Webhook signature verification failed:', errorMessage);
     return NextResponse.json(
-      { error: `Webhook Error: ${error.message}` },
+      { error: `Webhook Error: ${errorMessage}` },
       { status: 400 }
     );
   }
@@ -253,7 +273,7 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json({ received: true });
-  } catch (error: any) {
+  } catch (error) {
     console.error('Error processing webhook:', error);
     return NextResponse.json(
       { error: 'Webhook handler failed' },

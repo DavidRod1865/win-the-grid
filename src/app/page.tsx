@@ -10,15 +10,13 @@ function LandingPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user } = useAuth();
-  const [isHovered, setIsHovered] = useState(false);
   const [showGridCodeModal, setShowGridCodeModal] = useState(false);
   const [gridCode, setGridCode] = useState('');
   const [showMobileMenu, setShowMobileMenu] = useState(false);
 
   useEffect(() => {
-    if (searchParams.get('join') === '1') {
-      setShowGridCodeModal(true);
-    }
+    const shouldShowModal = searchParams.get('join') === '1';
+    setShowGridCodeModal(shouldShowModal);
   }, [searchParams]);
 
   const handleStartGrid = () => {
@@ -107,8 +105,6 @@ function LandingPageContent() {
             <button
               onClick={handleStartGrid}
               className="px-8 py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold text-lg transition-all duration-200 hover:shadow-xl transform hover:scale-105 rainbow-shadow"
-              onMouseEnter={() => setIsHovered(true)}
-              onMouseLeave={() => setIsHovered(false)}
             >
               Start a Grid
             </button>

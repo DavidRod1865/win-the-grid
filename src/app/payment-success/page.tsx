@@ -64,9 +64,10 @@ function PaymentSuccessContent() {
         }
 
         setLoading(false);
-      } catch (err: any) {
+      } catch (err) {
         console.error('Payment verification error:', err);
-        setError(err.message || 'Failed to verify payment');
+        const errorMessage = err instanceof Error ? err.message : 'Failed to verify payment';
+        setError(errorMessage);
         setLoading(false);
       }
     };

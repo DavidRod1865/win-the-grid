@@ -60,10 +60,11 @@ export async function GET(req: NextRequest) {
       amount: session.amount_total ? session.amount_total / 100 : null,
       currency: session.currency,
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error('Payment verification error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to verify payment';
     return NextResponse.json(
-      { error: error.message || 'Failed to verify payment' },
+      { error: errorMessage },
       { status: 500 }
     );
   }

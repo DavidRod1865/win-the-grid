@@ -158,8 +158,9 @@ export default function EditGridPage({ params }: EditGridPageProps) {
   const handlePremiumFeature = (action: () => void, featureName: string) => {
     try {
       action();
-    } catch (error: any) {
-      if (error.message.includes('requires')) {
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : '';
+      if (errorMessage.includes('requires')) {
         setShowUpgradeModal(true);
       } else {
         console.error(`Failed to use ${featureName}:`, error);
@@ -919,8 +920,9 @@ export default function EditGridPage({ params }: EditGridPageProps) {
       setSelectedQuarter('');
       setShowGameDayModal(false);
 
-    } catch (error: any) {
-      alert(`Error: ${error.message}`);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'An error occurred';
+      alert(`Error: ${errorMessage}`);
     }
   };
 
