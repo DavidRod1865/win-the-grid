@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, Suspense } from 'react';
+import { useEffect, Suspense, useState } from 'react';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { initPostHog, posthog } from '@/lib/posthog';
 import { useUser } from '@/contexts/AuthContext';
@@ -27,15 +27,19 @@ function PostHogPageView() {
 }
 
 export function PostHogProvider({ children }: { children: React.ReactNode }) {
+  const [isClient, setIsClient] = useState(false);
   const user = useUser();
 
   // Initialize PostHog on mount
   useEffect(() => {
+    setIsClient(true);
     initPostHog();
   }, []);
 
-  // Identify user when authenticated
+  // Identify user when authenticated (only on client)
   useEffect(() => {
+    if (!isClient) return;
+
     if (user) {
       identifyUser(user.id, {
         email: user.email,
@@ -45,7 +49,7 @@ export function PostHogProvider({ children }: { children: React.ReactNode }) {
       // Reset PostHog when user logs out
       resetUser();
     }
-  }, [user]);
+  }, [user, isClient]);
 
   return (
     <>
