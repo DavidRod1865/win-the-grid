@@ -1034,7 +1034,12 @@ export default function EditGridPage({ params }: EditGridPageProps) {
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
                     </svg>
-                    {gridState.title || 'Super Bowl LX'}
+                    <span>{gridState.title || 'Super Bowl LX'}</span>
+                    {gridState.ownership?.isPremium && (
+                      <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
+                        Premium
+                      </span>
+                    )}
                     <svg className={`w-4 h-4 transition-transform ${showGridsDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                     </svg>
@@ -1066,8 +1071,13 @@ export default function EditGridPage({ params }: EditGridPageProps) {
                 </div>
               )}
               {userGrids.length <= 1 && (
-                <h1 className="text-2xl font-bold text-gray-900">
+                <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
                   {gridState.title || 'Super Bowl LX'} Squares Calculator
+                  {gridState.ownership?.isPremium && (
+                    <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700">
+                      Premium
+                    </span>
+                  )}
                 </h1>
               )}
             </div>
@@ -1075,6 +1085,11 @@ export default function EditGridPage({ params }: EditGridPageProps) {
               <span className="text-lg font-semibold text-gray-900 truncate">
                 {gridState.title || 'Super Bowl LX'}
               </span>
+              {gridState.ownership?.isPremium && (
+                <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
+                  Premium
+                </span>
+              )}
             </div>
             <div className="hidden md:flex items-center gap-3">
               <Link
@@ -1089,15 +1104,6 @@ export default function EditGridPage({ params }: EditGridPageProps) {
               >
                 How to Play
               </Link>
-              <a
-                href="https://buymeacoffee.com"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-yellow-500 hover:bg-yellow-600 text-white rounded-md font-medium text-sm transition-all duration-200 hover:shadow-lg"
-              >
-                <span className="text-base">☕</span>
-                Coffee
-              </a>
               {user && <UserMenu />}
               <button
                 onClick={handleShareGrid}
@@ -1111,30 +1117,38 @@ export default function EditGridPage({ params }: EditGridPageProps) {
               >
                 {sharingInProgress ? 'Sharing...' : features.canShare ? 'Share Grid' : 'Share (Premium)'}
               </button>
-              <button 
-                onClick={() => {
-                  if (features.canExportExcel) {
-                    exportToExcel(gridState);
-                  } else {
-                    setShowUpgradeModal(true);
-                  }
-                }}
-                className={`py-2 px-4 rounded-md font-medium transition-all duration-200 hover:shadow-lg text-sm ${
-                  features.canExportExcel 
-                    ? 'bg-green-600 hover:bg-green-700 text-white' 
-                    : 'bg-gray-400 hover:bg-gray-500 text-white'
-                }`}
-                aria-label={features.canExportExcel ? "Export grid to Excel file" : "Sign up to export to Excel"}
-              >
-                {features.canExportExcel ? 'Export to Excel' : 'Excel (Premium)'}
-              </button>
-              <button 
-                onClick={() => generatePDF(gridState)}
-                className="py-2 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-md font-medium transition-all duration-200 hover:shadow-lg text-sm"
-                aria-label="Generate and print PDF"
-              >
-                Print PDF
-              </button>
+              <details className="relative">
+                <summary className="list-none py-2 px-4 rounded-md font-medium transition-all duration-200 hover:shadow-lg text-sm bg-blue-600 hover:bg-blue-700 text-white cursor-pointer">
+                  Export
+                </summary>
+                <div className="absolute right-0 mt-2 w-48 rounded-md border border-gray-200 bg-white shadow-lg p-2 flex flex-col gap-1">
+                  <button
+                    onClick={() => {
+                      if (features.canExportExcel) {
+                        exportToExcel(gridState);
+                      } else {
+                        setShowUpgradeModal(true);
+                      }
+                    }}
+                    disabled={!features.canExportExcel}
+                    className={`w-full text-left px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                      features.canExportExcel
+                        ? 'text-gray-800 hover:bg-gray-100'
+                        : 'text-gray-400 cursor-not-allowed'
+                    }`}
+                    aria-label={features.canExportExcel ? "Export grid to Excel file" : "Sign up to export to Excel"}
+                  >
+                    {features.canExportExcel ? 'Export to Excel' : 'Excel (Premium)'}
+                  </button>
+                  <button
+                    onClick={() => generatePDF(gridState)}
+                    className="w-full text-left px-3 py-2 rounded-md text-sm font-medium text-gray-800 hover:bg-gray-100 transition-colors"
+                    aria-label="Generate and print PDF"
+                  >
+                    Print PDF
+                  </button>
+                </div>
+              </details>
               <button 
                 onClick={() => setShowSettingsModal(true)}
                 className="p-2 rounded-md bg-gray-600 hover:bg-gray-700 text-white transition-all duration-200 hover:shadow-lg"
@@ -1235,15 +1249,6 @@ export default function EditGridPage({ params }: EditGridPageProps) {
                 >
                   How to Play
                 </Link>
-                <a
-                  href="https://buymeacoffee.com"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-yellow-500 hover:bg-yellow-600 text-white rounded-md font-medium text-sm transition-all duration-200 hover:shadow-lg"
-                >
-                  <span className="text-base">☕</span>
-                  Coffee
-                </a>
                 {user && <UserMenu />}
                 <button
                   onClick={() => {
@@ -1260,34 +1265,42 @@ export default function EditGridPage({ params }: EditGridPageProps) {
                 >
                   {sharingInProgress ? 'Sharing...' : features.canShare ? 'Share Grid' : 'Share (Premium)'}
                 </button>
-                <button 
-                  onClick={() => {
-                    setShowMobileMenu(false);
-                    if (features.canExportExcel) {
-                      exportToExcel(gridState);
-                    } else {
-                      setShowUpgradeModal(true);
-                    }
-                  }}
-                  className={`py-2 px-4 rounded-md font-medium transition-all duration-200 hover:shadow-lg text-sm ${
-                    features.canExportExcel 
-                      ? 'bg-green-600 hover:bg-green-700 text-white' 
-                      : 'bg-gray-400 hover:bg-gray-500 text-white'
-                  }`}
-                  aria-label={features.canExportExcel ? "Export grid to Excel file" : "Sign up to export to Excel"}
-                >
-                  {features.canExportExcel ? 'Export to Excel' : 'Excel (Premium)'}
-                </button>
-                <button 
-                  onClick={() => {
-                    setShowMobileMenu(false);
-                    generatePDF(gridState);
-                  }}
-                  className="py-2 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-md font-medium transition-all duration-200 hover:shadow-lg text-sm"
-                  aria-label="Generate and print PDF"
-                >
-                  Print PDF
-                </button>
+                <details className="w-full">
+                  <summary className="list-none w-full py-2 px-4 rounded-md font-medium transition-all duration-200 hover:shadow-lg text-sm bg-blue-600 hover:bg-blue-700 text-white cursor-pointer">
+                    Export
+                  </summary>
+                  <div className="mt-2 flex flex-col gap-2">
+                    <button
+                      onClick={() => {
+                        setShowMobileMenu(false);
+                        if (features.canExportExcel) {
+                          exportToExcel(gridState);
+                        } else {
+                          setShowUpgradeModal(true);
+                        }
+                      }}
+                      disabled={!features.canExportExcel}
+                      className={`w-full text-left px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                        features.canExportExcel
+                          ? 'text-gray-800 bg-gray-100 hover:bg-gray-200'
+                          : 'text-gray-400 bg-gray-100 cursor-not-allowed'
+                      }`}
+                      aria-label={features.canExportExcel ? "Export grid to Excel file" : "Sign up to export to Excel"}
+                    >
+                      {features.canExportExcel ? 'Export to Excel' : 'Excel (Premium)'}
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowMobileMenu(false);
+                        generatePDF(gridState);
+                      }}
+                      className="w-full text-left px-3 py-2 rounded-md text-sm font-medium text-gray-800 bg-gray-100 hover:bg-gray-200 transition-colors"
+                      aria-label="Generate and print PDF"
+                    >
+                      Print PDF
+                    </button>
+                  </div>
+                </details>
                 <button 
                   onClick={() => {
                     setShowMobileMenu(false);

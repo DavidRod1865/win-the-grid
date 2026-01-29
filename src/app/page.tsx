@@ -274,15 +274,6 @@ function LandingPageContent() {
               Terms
             </Link>
           </div>
-          <a
-            href="https://buymeacoffee.com"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 px-4 py-2 bg-yellow-500 hover:bg-yellow-600 text-white rounded-lg font-medium transition-all duration-200 hover:shadow-lg transform hover:scale-105"
-          >
-            <span className="text-xl">☕</span>
-            Buy Me a Coffee
-          </a>
         </div>
       </footer>
       </div>

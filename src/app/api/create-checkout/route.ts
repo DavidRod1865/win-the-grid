@@ -9,12 +9,26 @@ const supabase = createClient(
 
 export async function POST(req: NextRequest) {
   try {
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      return NextResponse.json(
+        { error: 'Supabase server credentials are not configured' },
+        { status: 500 }
+      );
+    }
+
     const { gridId, userId, productType } = await req.json();
 
     // Validate required fields
     if (!gridId || !userId || !productType) {
       return NextResponse.json(
         { error: 'Missing required fields: gridId, userId, productType' },
+        { status: 400 }
+      );
+    }
+
+    if (gridId === 'local-grid') {
+      return NextResponse.json(
+        { error: 'Invalid gridId: grid must be saved before checkout' },
         { status: 400 }
       );
     }
@@ -29,11 +43,24 @@ export async function POST(req: NextRequest) {
     // Check if grid exists and user owns it
     const { data: grid, error: gridError } = await supabase
       .from('grids')
-      .select('id, created_by, is_premium, data')
+      .select('id, created_by, is_premium')
       .eq('id', gridId)
       .single();
 
-    if (gridError || !grid) {
+    if (gridError) {
+      console.error('Failed to load grid for checkout:', gridError);
+      return NextResponse.json(
+        {
+          error:
+            process.env.NODE_ENV === 'production'
+              ? 'Failed to load grid'
+              : `Failed to load grid: ${gridError.message}`,
+        },
+        { status: 500 }
+      );
+    }
+
+    if (!grid) {
       return NextResponse.json(
         { error: 'Grid not found' },
         { status: 404 }
