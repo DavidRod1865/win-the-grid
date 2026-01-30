@@ -101,6 +101,7 @@ export default function GridPage() {
   const [paymentFilter, setPaymentFilter] = useState<'all' | 'paid' | 'not-paid'>('all');
   const dateInputRef = useRef<HTMLInputElement>(null);
   const [showGamePicker, setShowGamePicker] = useState(false);
+  const [gameDetails, setGameDetails] = useState<{ date?: string; status?: string } | null>(null);
   
   // Custom payout percentages
   const [customPercentages, setCustomPercentages] = useState({
@@ -267,6 +268,35 @@ export default function GridPage() {
     // Load grid state for anonymous users
     loadInitialState();
   }, []);
+
+  // Fetch game details when gameId changes
+  useEffect(() => {
+    const fetchGameDetails = async () => {
+      if (!gridState.gameId) {
+        setGameDetails(null);
+        return;
+      }
+
+      try {
+        const { data, error } = await supabase
+          .from('games')
+          .select('scheduled_time, status')
+          .eq('id', gridState.gameId)
+          .single();
+
+        if (data && !error) {
+          setGameDetails({
+            date: data.scheduled_time,
+            status: data.status
+          });
+        }
+      } catch (error) {
+        console.error('Failed to fetch game details:', error);
+      }
+    };
+
+    fetchGameDetails();
+  }, [gridState.gameId]);
 
   // Load features based on subscription and grid
   useEffect(() => {
@@ -1350,11 +1380,13 @@ export default function GridPage() {
                   {gridState.selectedTemplate === 'Custom' ? (
                       <div className="mt-2 space-y-3">
                       {/* Info Box - Important */}
-                      <div className="p-3 bg-blue-50/90 backdrop-blur-sm border border-blue-200 rounded">
-                        <p className="text-sm text-blue-900">
-                          <strong>Important:</strong> All percentages (main payouts + side pools) are of the total pot and must equal exactly 100%.
-                        </p>
-                      </div>
+                      {!validation.isValid && (
+                        <div className="p-3 bg-red-50/90 backdrop-blur-sm border border-red-300 rounded">
+                          <p className="text-sm text-red-900">
+                            <strong>Important:</strong> All percentages (main payouts + side pools) are of the total pot and must equal exactly 100%.
+                          </p>
+                        </div>
+                      )}
 
                       {/* Validation Display */}
                       {!validation.isValid && (
@@ -1978,7 +2010,16 @@ export default function GridPage() {
                     <div className="w-12 h-16"></div>
                     <div className="w-12 h-16"></div>
                     <div className="flex-1 min-w-[640px] h-16 flex items-center justify-center font-semibold text-base md:text-lg lg:text-xl text-black border-2 border-gray-400 bg-blue-50">
-                      {gridState.homeTeamName || 'Home Team'}
+                      <div className="flex items-center gap-3">
+                        {gridState.homeTeamLogo && (
+                          <img
+                            src={gridState.homeTeamLogo}
+                            alt={gridState.homeTeamName || 'Home Team'}
+                            className="h-8 w-8 object-contain"
+                          />
+                        )}
+                        <span>{gridState.homeTeamName || 'Home Team'}</span>
+                      </div>
                     </div>
                   </div>
                   
@@ -1999,7 +2040,16 @@ export default function GridPage() {
                   <div className="relative flex">
                     {/* Away Team - spans all rows */}
                     <div className="w-12 h-[800px] flex items-center justify-center font-semibold text-base md:text-lg lg:text-xl text-black border-2 border-gray-400 bg-red-50 absolute left-0">
-                      <span className="transform -rotate-90 whitespace-nowrap">{gridState.awayTeamName || 'Away Team'}</span>
+                      <div className="flex items-center gap-2 transform -rotate-90 whitespace-nowrap">
+                        {gridState.awayTeamLogo && (
+                          <img
+                            src={gridState.awayTeamLogo}
+                            alt={gridState.awayTeamName || 'Away Team'}
+                            className="h-8 w-8 object-contain"
+                          />
+                        )}
+                        <span>{gridState.awayTeamName || 'Away Team'}</span>
+                      </div>
                     </div>
                     
                     {/* Grid Rows */}
@@ -2182,42 +2232,22 @@ export default function GridPage() {
             
             <div className="space-y-4">
               {/* Quick Setup - Select Game */}
-              <div className="p-3 bg-gradient-to-r from-blue-50 to-purple-50 border border-blue-200 rounded-lg">
-                <div className="flex items-center justify-between mb-3">
-                  <div>
-                    <h4 className="text-sm font-semibold text-black mb-1">Quick Setup</h4>
-                    <p className="text-xs text-gray-600">Select a real game to auto-fill team details</p>
-                  </div>
-                  <button
-                    onClick={() => setShowGamePicker(true)}
-                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md font-medium transition-colors"
-                  >
-                    Select Game
-                  </button>
-                </div>
-
-                {/* Display Selected Game */}
-                {gridState.gameId && (
-                  <div className="pt-3 border-t border-blue-200">
-                    <div className="flex items-center gap-3">
-                      <div className="flex items-center gap-2 flex-1">
-                        {gridState.awayTeamLogo && (
-                          <img src={gridState.awayTeamLogo} alt={gridState.awayTeamName} className="w-8 h-8 object-contain" />
-                        )}
-                        <span className="text-sm font-medium text-gray-900">{gridState.awayTeamName}</span>
-                      </div>
-                      <span className="text-xs text-gray-500">@</span>
-                      <div className="flex items-center gap-2 flex-1 justify-end">
-                        <span className="text-sm font-medium text-gray-900">{gridState.homeTeamName}</span>
-                        {gridState.homeTeamLogo && (
-                          <img src={gridState.homeTeamLogo} alt={gridState.homeTeamName} className="w-8 h-8 object-contain" />
-                        )}
-                      </div>
+              {!(gridState.gameId || gridState.homeTeamLogo || gridState.awayTeamLogo) && (
+                <div className="p-3 bg-gradient-to-r from-blue-50 to-purple-50 border border-blue-200 rounded-lg">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="text-sm font-semibold text-black mb-1">Quick Setup</h4>
+                      <p className="text-xs text-gray-600">Select a real game to auto-fill team details</p>
                     </div>
-                    <p className="text-xs text-gray-500 mt-2 text-center">Selected game teams will auto-populate below</p>
+                    <button
+                      onClick={() => setShowGamePicker(true)}
+                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md font-medium transition-colors"
+                    >
+                      Select Game
+                    </button>
                   </div>
-                )}
-              </div>
+                </div>
+              )}
 
               <div>
                 <h4 className="text-sm font-semibold text-gray-700 mb-2">Grid Title</h4>
@@ -2243,49 +2273,122 @@ export default function GridPage() {
                 </p>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              {/* Game Details Card or Team Name Inputs */}
+              {(gridState.gameId || gridState.homeTeamLogo || gridState.awayTeamLogo) ? (
                 <div>
-                  <h4 className="text-sm font-semibold text-gray-700 mb-2">Home Team</h4>
-                  <input
-                    type="text"
-                    value={gridState.homeTeamName || 'Home Team'}
-                    onChange={async (e) => {
-                      const newState = { ...gridState, homeTeamName: e.target.value };
-                      setGridState(newState);
-                      
-                      try {
-                        await StorageFactory.getInstance().saveGrid(newState);
-                      } catch (error) {
-                        console.error('Failed to save grid state:', error);
-                      }
-                    }}
-                    className="w-full px-3 py-2.5 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-black transition-all duration-200"
-                    placeholder="Home Team"
-                    aria-label="Home team name"
-                  />
+                  <h4 className="text-sm font-semibold text-gray-700 mb-2">Selected Game</h4>
+                  <div className="border border-gray-200 rounded-lg p-6 bg-gradient-to-br from-gray-50 to-blue-50">
+                    {/* Matchup - Teams with logos on top */}
+                    <div className="flex items-start justify-center gap-8 mb-4">
+                      {/* Away Team */}
+                      <div className="flex flex-col items-center flex-1">
+                        {gridState.awayTeamLogo && (
+                          <img
+                            src={gridState.awayTeamLogo}
+                            alt={gridState.awayTeamName}
+                            className="w-20 h-20 object-contain mb-2"
+                          />
+                        )}
+                        <div className="font-semibold text-gray-900 text-center text-sm">{gridState.awayTeamName}</div>
+                        <div className="text-xs text-gray-500">Away</div>
+                      </div>
+
+                      {/* VS Divider */}
+                      <div className="flex items-center pt-6">
+                        <div className="text-lg font-bold text-gray-400">VS</div>
+                      </div>
+
+                      {/* Home Team */}
+                      <div className="flex flex-col items-center flex-1">
+                        {gridState.homeTeamLogo && (
+                          <img
+                            src={gridState.homeTeamLogo}
+                            alt={gridState.homeTeamName}
+                            className="w-20 h-20 object-contain mb-2"
+                          />
+                        )}
+                        <div className="font-semibold text-gray-900 text-center text-sm">{gridState.homeTeamName}</div>
+                        <div className="text-xs text-gray-500">Home</div>
+                      </div>
+                    </div>
+
+                    {/* Game Date & Time */}
+                    {gameDetails?.date && (
+                      <div className="text-center py-2 px-3 bg-white rounded-md mb-4">
+                        <div className="text-sm font-medium text-gray-700">
+                          {new Date(gameDetails.date).toLocaleDateString('en-US', {
+                            timeZone: 'America/New_York',
+                            weekday: 'long',
+                            month: 'long',
+                            day: 'numeric',
+                            year: 'numeric'
+                          })}
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          {new Date(gameDetails.date).toLocaleTimeString('en-US', {
+                            timeZone: 'America/New_York',
+                            hour: 'numeric',
+                            minute: '2-digit',
+                            hour12: true
+                          })} EST
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Change Game Button */}
+                    <button
+                      onClick={() => setShowGamePicker(true)}
+                      className="w-full py-2 px-3 bg-white hover:bg-gray-50 border border-gray-300 text-gray-700 rounded-md text-sm font-medium transition-colors"
+                    >
+                      Change Game
+                    </button>
+                  </div>
                 </div>
-                
-                <div>
-                  <h4 className="text-sm font-semibold text-gray-700 mb-2">Away Team</h4>
-                  <input
-                    type="text"
-                    value={gridState.awayTeamName || 'Away Team'}
-                    onChange={async (e) => {
-                      const newState = { ...gridState, awayTeamName: e.target.value };
-                      setGridState(newState);
-                      
-                      try {
-                        await StorageFactory.getInstance().saveGrid(newState);
-                      } catch (error) {
-                        console.error('Failed to save grid state:', error);
-                      }
-                    }}
-                    className="w-full px-3 py-2.5 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-black transition-all duration-200"
-                    placeholder="Away Team"
-                    aria-label="Away team name"
-                  />
+              ) : (
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <h4 className="text-sm font-semibold text-gray-700 mb-2">Home Team</h4>
+                    <input
+                      type="text"
+                      value={gridState.homeTeamName || 'Home Team'}
+                      onChange={async (e) => {
+                        const newState = { ...gridState, homeTeamName: e.target.value };
+                        setGridState(newState);
+
+                        try {
+                          await StorageFactory.getInstance().saveGrid(newState);
+                        } catch (error) {
+                          console.error('Failed to save grid state:', error);
+                        }
+                      }}
+                      className="w-full px-3 py-2.5 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-black transition-all duration-200"
+                      placeholder="Home Team"
+                      aria-label="Home team name"
+                    />
+                  </div>
+
+                  <div>
+                    <h4 className="text-sm font-semibold text-gray-700 mb-2">Away Team</h4>
+                    <input
+                      type="text"
+                      value={gridState.awayTeamName || 'Away Team'}
+                      onChange={async (e) => {
+                        const newState = { ...gridState, awayTeamName: e.target.value };
+                        setGridState(newState);
+
+                        try {
+                          await StorageFactory.getInstance().saveGrid(newState);
+                        } catch (error) {
+                          console.error('Failed to save grid state:', error);
+                        }
+                      }}
+                      className="w-full px-3 py-2.5 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-black transition-all duration-200"
+                      placeholder="Away Team"
+                      aria-label="Away team name"
+                    />
+                  </div>
                 </div>
-              </div>
+              )}
               
               <div className="pt-4 border-t border-gray-200">
                 <h4 className="text-sm font-semibold text-gray-700 mb-3">Grid Management</h4>
@@ -2300,30 +2403,6 @@ export default function GridPage() {
                   >
                     🗑️ Clear All Names
                   </button>
-                  
-                  <button
-                    onClick={() => {
-                      if (gridState.numbersGenerated) {
-                        setShowSettingsModal(false);
-                        setShowClearNumbersConfirm(true);
-                      }
-                    }}
-                    disabled={!gridState.numbersGenerated}
-                    className={`w-full py-2.5 px-4 rounded-md font-medium transition-colors duration-200 flex items-center justify-center gap-2 ${
-                      gridState.numbersGenerated
-                        ? 'bg-orange-600 hover:bg-orange-700 text-white'
-                        : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                    }`}
-                    aria-label="Clear generated numbers"
-                  >
-                    🔢 Clear Generated Numbers
-                  </button>
-                  
-                  {!gridState.numbersGenerated && (
-                    <p className="text-xs text-gray-500 text-center">
-                      Numbers must be generated before they can be cleared
-                    </p>
-                  )}
                 </div>
               </div>
               
@@ -2361,31 +2440,6 @@ export default function GridPage() {
                 className="flex-1 py-2 px-4 bg-red-600 hover:bg-red-700 text-white rounded-md font-medium transition-colors"
               >
                 Clear All
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showClearNumbersConfirm && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50" onClick={() => setShowClearNumbersConfirm(false)}>
-          <div className="bg-white/95 backdrop-blur-md rounded-lg shadow-2xl p-6 max-w-md mx-4 border border-white/20" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-lg font-semibold text-black mb-2">Clear Generated Numbers?</h3>
-            <p className="text-sm text-gray-700 mb-4">
-              This will remove all generated numbers from rows and columns. You'll need to regenerate them before the game.
-            </p>
-            <div className="flex space-x-3">
-              <button
-                onClick={() => setShowClearNumbersConfirm(false)}
-                className="flex-1 py-2 px-4 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-md font-medium transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={clearNumbers}
-                className="flex-1 py-2 px-4 bg-orange-600 hover:bg-orange-700 text-white rounded-md font-medium transition-colors"
-              >
-                Clear Numbers
               </button>
             </div>
           </div>
@@ -2660,11 +2714,13 @@ export default function GridPage() {
             </div>
 
             {/* Info Box */}
-            <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded">
-              <p className="text-sm text-blue-900">
-                <strong>Important:</strong> Side pool percentages are added to your main payout percentages. The total (main + side pools) must equal exactly 100%.
-              </p>
-            </div>
+            {!validation.isValid && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-300 rounded">
+                <p className="text-sm text-red-900">
+                  <strong>Important:</strong> Side pool percentages are added to your main payout percentages. The total (main + side pools) must equal exactly 100%.
+                </p>
+              </div>
+            )}
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {(gridState.sidePools || []).map((pool) => (

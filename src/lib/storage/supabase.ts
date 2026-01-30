@@ -89,6 +89,7 @@ export class SupabaseProvider implements StorageProvider {
         created_by: user.id,
         sport_id: supabaseData.sport_id,
         game_type_id: supabaseData.game_type_id,
+        game_id: gridState.gameId,
         price_per_box: supabaseData.price_per_box,
         payout_template: supabaseData.payout_template,
         payout_rules: supabaseData.payout_rules,
@@ -138,6 +139,7 @@ export class SupabaseProvider implements StorageProvider {
         .from('grids')
         .update({
           title: supabaseData.title,
+          game_id: gridState.gameId,
           price_per_box: supabaseData.price_per_box,
           payout_template: supabaseData.payout_template,
           payout_rules: supabaseData.payout_rules,
@@ -625,6 +627,9 @@ export class SupabaseProvider implements StorageProvider {
       gameWinners,
       homeTeamName: teams.home.name,
       awayTeamName: teams.away.name,
+      homeTeamLogo: teams.home.logo_url,
+      awayTeamLogo: teams.away.logo_url,
+      gameId: supabaseGrid.game_id,
       sidePools: supabaseGrid.side_pools || [],
       participantPayments, // Extracted from participants
       wentToOvertime: Boolean(supabaseGrid.went_to_overtime),

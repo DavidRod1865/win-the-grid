@@ -70,11 +70,13 @@ export class MigrationTransformer {
     const teams = {
       home: {
         name: gridState.homeTeamName || 'Home Team',
-        abbreviation: this.generateAbbreviation(gridState.homeTeamName || 'Home Team')
+        abbreviation: this.generateAbbreviation(gridState.homeTeamName || 'Home Team'),
+        logo_url: gridState.homeTeamLogo
       },
       away: {
-        name: gridState.awayTeamName || 'Away Team',  
-        abbreviation: this.generateAbbreviation(gridState.awayTeamName || 'Away Team')
+        name: gridState.awayTeamName || 'Away Team',
+        abbreviation: this.generateAbbreviation(gridState.awayTeamName || 'Away Team'),
+        logo_url: gridState.awayTeamLogo
       }
     };
 
