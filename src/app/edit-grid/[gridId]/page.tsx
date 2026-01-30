@@ -16,6 +16,7 @@ import UserMenu from '@/components/ui/UserMenu';
 import UnlockSharingModal from '@/components/payment/UnlockSharingModal';
 import ShareModal from '@/components/grid/ShareModal';
 import { analytics } from '@/lib/analytics';
+import { validatePayoutPercentages } from '@/lib/utils/payout-validation';
 import logo from '@/assets/with_the_grid_logo.png';
 
 interface EditGridPageProps {
@@ -1007,16 +1008,20 @@ export default function EditGridPage({ params }: EditGridPageProps) {
   const enabledSidePools = (gridState.sidePools || []).filter(p => p.enabled && p.percentage > 0);
   const totalSidePoolPercentage = enabledSidePools.reduce((sum, pool) => sum + pool.percentage, 0);
   const totalSidePoolAmount = (totalPot * totalSidePoolPercentage) / 100;
-  const remainingPotForMainPayouts = totalPot - totalSidePoolAmount;
-  
-  // Recalculate payouts based on remaining pot after side pools
+
+  // Validate payout percentages (main + side pools must equal 100%)
+  const validation = validatePayoutPercentages(
+    gridState.payoutRules,
+    enabledSidePools.map(p => ({ name: p.name, percentage: p.percentage, enabled: p.enabled }))
+  );
+
+  // Calculate payouts - all percentages are of the total pot (not remaining pot)
   const calculatedPayoutsWithSidePools = calculatedPayouts.map(payout => {
     const rule = gridState.payoutRules.find(r => r.quarter === payout.quarter);
     if (rule) {
       const percentage = rule.percentage;
-      const amount = (remainingPotForMainPayouts * percentage) / 100;
-      const adjustedPercentage = totalPot > 0 ? (amount / totalPot) * 100 : percentage;
-      return { ...payout, amount, adjustedPercentage };
+      const amount = (totalPot * percentage) / 100;
+      return { ...payout, amount };
     }
     return payout;
   });
@@ -1417,6 +1422,23 @@ export default function EditGridPage({ params }: EditGridPageProps) {
                   {/* Template Description or Custom Inputs */}
                   {gridState.selectedTemplate === 'Custom' ? (
                       <div className="mt-2 space-y-3">
+                      {/* Info Box - Important */}
+                      <div className="p-3 bg-blue-50/90 backdrop-blur-sm border border-blue-200 rounded">
+                        <p className="text-sm text-blue-900">
+                          <strong>Important:</strong> All percentages (main payouts + side pools) are of the total pot and must equal exactly 100%.
+                        </p>
+                      </div>
+
+                      {/* Validation Display */}
+                      {!validation.isValid && (
+                        <div className="p-3 bg-red-50/90 backdrop-blur-sm border border-red-300 rounded">
+                          <p className="text-sm font-semibold text-red-800 mb-1">Validation Error:</p>
+                          {validation.errors.map((error, i) => (
+                            <p key={i} className="text-xs text-red-600">• {error}</p>
+                          ))}
+                        </div>
+                      )}
+
                       {/* Custom Percentage Inputs */}
                       <div className="p-3 bg-gray-50/90 backdrop-blur-sm border border-gray-200 rounded">
                         <h4 className="text-sm font-semibold text-black mb-3">Custom Payout Structure:</h4>
@@ -1425,12 +1447,7 @@ export default function EditGridPage({ params }: EditGridPageProps) {
                             const total = Object.values(customPercentages).reduce((sum, val) => sum + val, 0);
                             const isValid = total === 100;
                             const percentage = customPercentages[quarter as keyof typeof customPercentages];
-                            const amount = (remainingPotForMainPayouts * percentage) / 100;
-                            // Calculate adjusted percentage as percentage of total pot
-                            const adjustedPercentage = totalPot > 0 ? (amount / totalPot) * 100 : percentage;
-                            const displayPercentage = enabledSidePools.length > 0 
-                              ? adjustedPercentage.toFixed(2)
-                              : percentage.toFixed(2);
+                            const amount = (totalPot * percentage) / 100;
                             return (
                               <div key={quarter} className="space-y-1">
                                 <div className="flex justify-between items-center">
@@ -1449,11 +1466,8 @@ export default function EditGridPage({ params }: EditGridPageProps) {
                                       <span className="text-sm text-black">%</span>
                                     </div>
                                     <div className="flex items-center gap-2">
-                                      {enabledSidePools.length > 0 && (
-                                        <span className="text-xs text-gray-500">({displayPercentage}% of total)</span>
-                                      )}
                                       <span className="text-sm font-medium text-black">${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                        </div>
+                                    </div>
                                   </div>
                                 </div>
                               </div>
@@ -1462,7 +1476,7 @@ export default function EditGridPage({ params }: EditGridPageProps) {
                           <div className="mt-3">
                             <div className="flex justify-between items-center">
                               <span className="text-sm font-semibold text-black">Main Payouts Total:</span>
-                              <span className="text-sm font-semibold text-black">${remainingPotForMainPayouts.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                              <span className="text-sm font-semibold text-black">${(Object.values(customPercentages).reduce((sum, val) => sum + val, 0) * totalPot / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                             </div>
                           </div>
                           {/* Side Pools Section for Custom */}
@@ -1486,22 +1500,26 @@ export default function EditGridPage({ params }: EditGridPageProps) {
                             </div>
                           )}
                           
-                          <div className="mt-3 pt-3 border-t border-gray-300">
-                            <div className="flex justify-between items-center">
-                              <span className="text-sm font-semibold text-black">Total:</span>
-                              <div className="flex items-center gap-3">
-                                <span className={`text-sm font-bold ${Object.values(customPercentages).reduce((sum, val) => sum + val, 0) === 100 ? 'text-green-600' : 'text-red-600'}`}>
-                                  {Object.values(customPercentages).reduce((sum, val) => sum + val, 0)}%
-                                </span>
-                                <span className="text-sm font-semibold text-black">${remainingPotForMainPayouts.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                              </div>
-                            </div>
-                            {Object.values(customPercentages).reduce((sum, val) => sum + val, 0) !== 100 && (
-                              <p className="text-xs text-red-600 mt-1">Percentages must total 100%</p>
-                            )}
-                            <div className="flex justify-between items-center text-xs text-gray-600 mt-2">
+                          <div className="mt-3 pt-3 border-t border-gray-300 space-y-1">
+                            <div className="flex justify-between items-center text-xs text-gray-600">
                               <span>Total Pot:</span>
-                              <span>${totalPot.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                              <span className="font-semibold">${totalPot.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                            </div>
+                            <div className="flex justify-between items-center text-sm">
+                              <span className="text-black">Main Payouts ({validation.mainPayoutPercentage.toFixed(1)}%):</span>
+                              <span className="text-black">${(totalPot * validation.mainPayoutPercentage / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                            </div>
+                            {enabledSidePools.length > 0 && (
+                              <div className="flex justify-between items-center text-sm">
+                                <span className="text-black">Side Pools ({validation.sidePoolPercentage.toFixed(1)}%):</span>
+                                <span className="text-black">${(totalPot * validation.sidePoolPercentage / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                              </div>
+                            )}
+                            <div className="flex justify-between items-center font-semibold border-t pt-1">
+                              <span className="text-black">Total Allocated ({validation.totalPercentage.toFixed(1)}%):</span>
+                              <span className={validation.isValid ? 'text-green-600' : 'text-red-600'}>
+                                ${(totalPot * validation.totalPercentage / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </span>
                             </div>
                           </div>
                         </div>
@@ -1509,24 +1527,25 @@ export default function EditGridPage({ params }: EditGridPageProps) {
                       
                       {/* Visual Progress Bar for Custom */}
                       <div className="p-3 bg-gray-50/90 backdrop-blur-sm border border-gray-200 rounded">
-                        <h4 className="text-sm font-semibold text-black mb-2">Visual Breakdown:</h4>
+                        <div className="flex justify-between items-center mb-2">
+                          <h4 className="text-sm font-semibold text-black">Visual Breakdown:</h4>
+                          <span className={`text-xs font-semibold ${validation.isValid ? 'text-green-600' : 'text-red-600'}`}>
+                            Total: {validation.totalPercentage.toFixed(1)}%
+                          </span>
+                        </div>
                         <div className="mt-3">
                           <div className="flex h-3 rounded-full overflow-hidden bg-gray-200">
                             {['1st Quarter', 'Halftime', '3rd Quarter', 'Final Score'].map((quarter, index) => {
                               const colors = ['bg-red-400', 'bg-yellow-400', 'bg-green-400', 'bg-blue-400'];
                               const percentage = customPercentages[quarter as keyof typeof customPercentages];
-                              // Calculate adjusted percentage as percentage of total pot (accounting for side pools)
-                              const adjustedPercentage = enabledSidePools.length > 0 
-                                ? (remainingPotForMainPayouts * percentage / 100) / totalPot * 100
-                                : percentage;
                               return (
                                 <div
                                   key={quarter}
                                   className={`${colors[index % colors.length]} flex items-center justify-center text-[10px] text-white font-bold`}
-                                  style={{ width: `${adjustedPercentage}%` }}
-                                  title={`${quarter}: ${percentage}%${enabledSidePools.length > 0 ? ` (${adjustedPercentage.toFixed(2)}% of total)` : ''}`}
+                                  style={{ width: `${percentage}%` }}
+                                  title={`${quarter}: ${percentage}%`}
                                 >
-                                  {adjustedPercentage >= 15 ? `${adjustedPercentage.toFixed(2)}%` : ''}
+                                  {percentage >= 15 ? `${percentage.toFixed(2)}%` : ''}
                                 </div>
                               );
                             })}
@@ -1554,14 +1573,11 @@ export default function EditGridPage({ params }: EditGridPageProps) {
                           <div className="space-y-1 mb-3">
                             {selectedTemplate.rules.map((rule, index) => {
                               const payout = calculatedPayoutsWithSidePools.find(p => p.quarter === rule.quarter);
-                              const displayPercentage = enabledSidePools.length > 0 
-                                ? (payout?.adjustedPercentage || rule.percentage).toFixed(2)
-                                : rule.percentage.toFixed(2);
                               return (
                               <div key={index} className="flex justify-between items-center text-sm">
                                 <span className="text-black">{rule.quarter}:</span>
                                   <div className="flex items-center gap-3">
-                                    <span className="text-gray-600">{displayPercentage}%</span>
+                                    <span className="text-gray-600">{rule.percentage.toFixed(2)}%</span>
                                     <span className="font-medium text-black">${(payout?.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                                   </div>
                                 </div>
@@ -1570,7 +1586,7 @@ export default function EditGridPage({ params }: EditGridPageProps) {
                             <div className="mt-2">
                               <div className="flex justify-between items-center text-sm font-semibold">
                                 <span className="text-black">Main Payouts Total:</span>
-                                <span className="text-black">${remainingPotForMainPayouts.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                <span className="text-black">${(gridState.payoutRules.reduce((sum, rule) => sum + rule.percentage, 0) * totalPot / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                               </div>
                             </div>
                           </div>
@@ -1608,19 +1624,14 @@ export default function EditGridPage({ params }: EditGridPageProps) {
                             <div className="flex h-3 rounded-full overflow-hidden bg-gray-200">
                               {selectedTemplate.rules.map((rule, index) => {
                                 const colors = ['bg-red-400', 'bg-yellow-400', 'bg-green-400', 'bg-blue-400'];
-                                const payout = calculatedPayoutsWithSidePools.find(p => p.quarter === rule.quarter);
-                                // Calculate adjusted percentage as percentage of total pot (accounting for side pools)
-                                const adjustedPercentage = enabledSidePools.length > 0 
-                                  ? (payout?.adjustedPercentage || rule.percentage)
-                                  : rule.percentage;
                                 return (
                                   <div
                                     key={index}
                                     className={`${colors[index % colors.length]} flex items-center justify-center text-[10px] text-white font-bold`}
-                                    style={{ width: `${adjustedPercentage}%` }}
-                                    title={`${rule.quarter}: ${rule.percentage}%${enabledSidePools.length > 0 ? ` (${adjustedPercentage.toFixed(2)}% of total)` : ''}`}
+                                    style={{ width: `${rule.percentage}%` }}
+                                    title={`${rule.quarter}: ${rule.percentage}%`}
                                   >
-                                    {adjustedPercentage >= 15 ? `${adjustedPercentage.toFixed(2)}%` : ''}
+                                    {rule.percentage >= 15 ? `${rule.percentage.toFixed(2)}%` : ''}
                                   </div>
                                 );
                               })}
@@ -2665,6 +2676,13 @@ export default function EditGridPage({ params }: EditGridPageProps) {
               >
                 ×
               </button>
+            </div>
+
+            {/* Info Box */}
+            <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded">
+              <p className="text-sm text-blue-900">
+                <strong>Important:</strong> Side pool percentages are added to your main payout percentages. The total (main + side pools) must equal exactly 100%.
+              </p>
             </div>
 
             {/* Sample Side Pool Configurations */}

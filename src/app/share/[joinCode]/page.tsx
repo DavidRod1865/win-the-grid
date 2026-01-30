@@ -157,13 +157,12 @@ export default function SharePage({ params }: SharePageProps) {
   const enabledSidePools = (gridState.sidePools || []).filter(pool => pool.enabled);
   const totalSidePoolPercentage = enabledSidePools.reduce((sum, pool) => sum + (pool.percentage || 0), 0);
   const totalSidePoolAmount = Math.round((totalPot * totalSidePoolPercentage) / 100);
-  const remainingPotForMainPayouts = totalPot - totalSidePoolAmount;
 
-  // Calculate payouts including side pools
+  // Calculate payouts - all percentages are of the total pot (not remaining pot)
   const calculatedPayouts = gridState.payoutRules.map(rule => ({
     quarter: rule.quarter,
     percentage: rule.percentage,
-    amount: Math.round((remainingPotForMainPayouts * rule.percentage) / 100)
+    amount: Math.round((totalPot * rule.percentage) / 100)
   }));
 
   const sidePoolPayouts = enabledSidePools.map(pool => ({
