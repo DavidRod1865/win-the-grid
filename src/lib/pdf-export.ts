@@ -33,10 +33,13 @@ export const generatePDF = async (gridState: GridState) => {
   pdf.text(payoutLine, pageWidth / 2, margin + 17, { align: 'center' });
 
   const enabledSidePools = (gridState.sidePools || []).filter(pool => pool.enabled);
+  const sidePotLineItems = enabledSidePools.map(pool => {
+    const amount = Math.round((totalPot * (pool.percentage || 0)) / 100 * 100) / 100;
+    const label = pool.name.replace(/\s*score/i, '').trim();
+    return `${label}: $${amount}`;
+  });
   if (enabledSidePools.length > 0) {
-    const sidePoolLine = enabledSidePools
-      .map(pool => `${pool.name}: ${pool.percentage}%`)
-      .join('  |  ');
+    const sidePoolLine = sidePotLineItems.join('  |  ');
     pdf.setFontSize(9);
     pdf.setTextColor(55, 65, 81);
     pdf.text(`Side Pots: ${sidePoolLine}`, pageWidth / 2, margin + 24, { align: 'center' });
@@ -223,6 +226,11 @@ export const printGrid = async (gridState: GridState) => {
   const payoutLine = `${payoutTexts.join('  |  ')}  |  Total Pot: $${totalPot}`;
 
   const enabledSidePools = (gridState.sidePools || []).filter(pool => pool.enabled);
+  const sidePotLineItems = enabledSidePools.map(pool => {
+    const amount = Math.round((totalPot * (pool.percentage || 0)) / 100 * 100) / 100;
+    const label = pool.name.replace(/\s*score/i, '').trim();
+    return `${label}: $${amount}`;
+  });
 
   printDiv.innerHTML = `
     <div style="display: flex; flex-direction: column; height: 100%; width: 100%; padding: 10px;">
@@ -232,7 +240,7 @@ export const printGrid = async (gridState: GridState) => {
         <p style="margin: 0; font-size: 14px;">${payoutLine}</p>
         ${enabledSidePools.length > 0 ? `
           <p style="margin: 6px 0 0 0; font-size: 12px; color: #374151;">
-            Side Pots: ${enabledSidePools.map(pool => `${pool.name}: ${pool.percentage}%`).join('  |  ')}
+            Side Pots: ${sidePotLineItems.join('  |  ')}
           </p>
         ` : ''}
       </div>
