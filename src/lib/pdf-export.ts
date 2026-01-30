@@ -17,12 +17,12 @@ export const generatePDF = async (gridState: GridState) => {
 
   // Title across the top
   const gameTitle = gridState.title || 'Super Bowl LX';
-  pdf.setFontSize(16);
+  pdf.setFontSize(18);
   pdf.setFont('helvetica', 'bold');
   pdf.text(gameTitle, pageWidth / 2, margin + 8, { align: 'center' });
 
   // Payouts across the top in a single line
-  pdf.setFontSize(11);
+  pdf.setFontSize(10);
   pdf.setFont('helvetica', 'normal');
   const payoutTexts = gridState.payoutRules.map(rule => {
     const amount = Math.round((totalPot * rule.percentage) / 100 * 100) / 100;
@@ -30,10 +30,21 @@ export const generatePDF = async (gridState: GridState) => {
     return `${quarterLabel}: $${amount}`;
   });
   const payoutLine = `${payoutTexts.join('  |  ')}  |  Total Pot: $${totalPot}`;
-  pdf.text(payoutLine, pageWidth / 2, margin + 18, { align: 'center' });
+  pdf.text(payoutLine, pageWidth / 2, margin + 17, { align: 'center' });
+
+  const enabledSidePools = (gridState.sidePools || []).filter(pool => pool.enabled);
+  if (enabledSidePools.length > 0) {
+    const sidePoolLine = enabledSidePools
+      .map(pool => `${pool.name}: ${pool.percentage}%`)
+      .join('  |  ');
+    pdf.setFontSize(9);
+    pdf.setTextColor(55, 65, 81);
+    pdf.text(`Side Pots: ${sidePoolLine}`, pageWidth / 2, margin + 24, { align: 'center' });
+    pdf.setTextColor(0, 0, 0);
+  }
 
   // Calculate grid dimensions to fill the entire remaining page
-  const gridStartY = margin + 38; // More space for Home Team label
+  const gridStartY = margin + 42; // More space for header/payouts
   const availableHeight = pageHeight - gridStartY - margin;
   const labelSpace = 20; // Space for Away Team label on the left
   const availableWidth = pageWidth - 2 * margin - labelSpace;
@@ -46,15 +57,15 @@ export const generatePDF = async (gridState: GridState) => {
   const gridStartX = margin + labelSpace;
 
   // Draw grid with rectangular cells to fill the page
-  pdf.setLineWidth(0.3);
+  pdf.setLineWidth(0.6);
   pdf.setFont('helvetica', 'normal');
   pdf.setFontSize(Math.max(8, Math.min(cellWidth, cellHeight) * 0.15)); // Scale font size with smaller dimension
 
   // Top-left corner cell
   pdf.setFillColor(243, 244, 246); // bg-gray-100 equivalent
   pdf.rect(gridStartX, gridStartY, cellWidth, cellHeight, 'F');
-  pdf.setDrawColor(156, 163, 175); // border-gray-400 equivalent
-  pdf.setLineWidth(0.5);
+  pdf.setDrawColor(107, 114, 128); // border-gray-500 equivalent
+  pdf.setLineWidth(0.7);
   pdf.rect(gridStartX, gridStartY, cellWidth, cellHeight, 'S');
   
   // Column headers (Home Team)
@@ -65,8 +76,8 @@ export const generatePDF = async (gridState: GridState) => {
     // Header cell background - blue theme like the web interface
     pdf.setFillColor(147, 197, 253); // bg-blue-300 equivalent
     pdf.rect(x, y, cellWidth, cellHeight, 'F');
-    pdf.setDrawColor(59, 130, 246); // border-blue-500 equivalent
-    pdf.setLineWidth(0.5);
+    pdf.setDrawColor(37, 99, 235); // border-blue-600 equivalent
+    pdf.setLineWidth(0.7);
     pdf.rect(x, y, cellWidth, cellHeight, 'S');
     
     // Header number
@@ -103,8 +114,8 @@ export const generatePDF = async (gridState: GridState) => {
     const rowHeaderX = gridStartX;
     pdf.setFillColor(254, 202, 202); // bg-red-300 equivalent
     pdf.rect(rowHeaderX, y, cellWidth, cellHeight, 'F');
-    pdf.setDrawColor(239, 68, 68); // border-red-500 equivalent
-    pdf.setLineWidth(0.5);
+    pdf.setDrawColor(220, 38, 38); // border-red-600 equivalent
+    pdf.setLineWidth(0.7);
     pdf.rect(rowHeaderX, y, cellWidth, cellHeight, 'S');
     
     const rowHeaderNum = gridState.numbersGenerated ? gridState.rowNumbers[row].toString() : '';
@@ -121,12 +132,23 @@ export const generatePDF = async (gridState: GridState) => {
       const boxIndex = row * 10 + col;
       const box = gridState.boxes[boxIndex];
       
-      // Cell background and border - white with gray border like web interface
-      pdf.setFillColor(255, 255, 255);
+      // Cell background and border - green tint for filled boxes
+      if (box.name.trim()) {
+        pdf.setFillColor(220, 252, 231); // green-100 tint
+      } else {
+        pdf.setFillColor(255, 255, 255);
+      }
       pdf.rect(x, y, cellWidth, cellHeight, 'F');
       pdf.setDrawColor(156, 163, 175); // border-gray-400 equivalent
-      pdf.setLineWidth(0.3);
+      pdf.setLineWidth(0.6);
       pdf.rect(x, y, cellWidth, cellHeight, 'S');
+
+      // Box number (top-right)
+      const boxNumber = (boxIndex + 1).toString();
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(Math.max(6, Math.min(cellWidth, cellHeight) * 0.16));
+      pdf.setTextColor(107, 114, 128); // text-gray-500
+      pdf.text(boxNumber, x + cellWidth - 1.2, y + 3.2, { align: 'right' });
       
       // Name in cell
       if (box.name.trim()) {
@@ -200,12 +222,19 @@ export const printGrid = async (gridState: GridState) => {
   });
   const payoutLine = `${payoutTexts.join('  |  ')}  |  Total Pot: $${totalPot}`;
 
+  const enabledSidePools = (gridState.sidePools || []).filter(pool => pool.enabled);
+
   printDiv.innerHTML = `
     <div style="display: flex; flex-direction: column; height: 100%; width: 100%; padding: 10px;">
       <!-- Title and payouts across the top -->
       <div style="text-align: center; margin-bottom: 20px;">
         <h1 style="margin: 0 0 8px 0; font-size: 24px; font-weight: bold;">${gameTitle}</h1>
         <p style="margin: 0; font-size: 14px;">${payoutLine}</p>
+        ${enabledSidePools.length > 0 ? `
+          <p style="margin: 6px 0 0 0; font-size: 12px; color: #374151;">
+            Side Pots: ${enabledSidePools.map(pool => `${pool.name}: ${pool.percentage}%`).join('  |  ')}
+          </p>
+        ` : ''}
       </div>
       
       <!-- Grid filling the remaining space -->
@@ -231,8 +260,9 @@ export const printGrid = async (gridState: GridState) => {
                 const boxIndex = row * 10 + col;
                 const box = gridState.boxes[boxIndex];
                 return `
-                  <td style="width: 9.09%; border: 1px solid #9CA3AF; background-color: white; text-align: center; font-size: 12px; padding: 2px; vertical-align: middle; word-wrap: break-word; overflow: hidden;">
-                    ${box.name || ''}
+                  <td style="width: 9.09%; border: 2px solid #6B7280; background-color: ${box.name ? '#DCFCE7' : 'white'}; font-size: 12px; padding: 2px; vertical-align: middle; word-wrap: break-word; overflow: hidden; position: relative;">
+                    <div style="position: absolute; top: 2px; right: 4px; font-size: 9px; color: #6B7280;">${boxIndex + 1}</div>
+                    <div style="text-align: center;">${box.name || ''}</div>
                   </td>
                 `;
               }).join('')}
