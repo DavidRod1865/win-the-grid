@@ -16,6 +16,24 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Validate base URL is configured
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL;
+    if (!baseUrl) {
+      return NextResponse.json(
+        { error: 'Application URL not configured' },
+        { status: 500 }
+      );
+    }
+
+    // Validate HTTPS in production
+    if (process.env.NODE_ENV === 'production' && !baseUrl.startsWith('https://')) {
+      console.error('SECURITY: APP_URL must use HTTPS in production');
+      return NextResponse.json(
+        { error: 'Invalid application configuration' },
+        { status: 500 }
+      );
+    }
+
     const { gridId, userId, productType } = await req.json();
 
     // Validate required fields
@@ -23,6 +41,28 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         { error: 'Missing required fields: gridId, userId, productType' },
         { status: 400 }
+      );
+    }
+
+    // CRITICAL SECURITY: Verify the authenticated user server-side
+    // This prevents privilege escalation where a client could create
+    // a checkout for a different user's account
+    const { data: { user: authenticatedUser }, error: authError } = await supabase.auth.getUser();
+
+    if (authError || !authenticatedUser) {
+      console.error('Authentication failed:', authError?.message);
+      return NextResponse.json(
+        { error: 'Unauthorized: You must be signed in to create a checkout' },
+        { status: 401 }
+      );
+    }
+
+    // Verify the userId in the request matches the authenticated user
+    if (userId !== authenticatedUser.id) {
+      console.error('User ID mismatch:', { requested: userId, authenticated: authenticatedUser.id });
+      return NextResponse.json(
+        { error: 'Forbidden: You can only create checkouts for your own account' },
+        { status: 403 }
       );
     }
 
@@ -123,7 +163,7 @@ export async function POST(req: NextRequest) {
         });
     }
 
-    // Create Checkout Session
+    // Create Checkout Session (using validated baseUrl instead of request origin)
     const session = await stripe.checkout.sessions.create({
       customer: stripeCustomerId,
       mode: productType === 'per-grid' ? 'payment' : 'subscription',
@@ -134,8 +174,8 @@ export async function POST(req: NextRequest) {
           quantity: 1,
         },
       ],
-      success_url: `${req.headers.get('origin')}/payment-success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${req.headers.get('origin')}/edit-grid/${gridId}?payment=cancelled`,
+      success_url: `${baseUrl}/payment-success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${baseUrl}/edit-grid/${gridId}?payment=cancelled`,
       metadata: {
         grid_id: gridId,
         user_id: userId,

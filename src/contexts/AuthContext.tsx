@@ -2,6 +2,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
+import { StorageFactory } from '@/lib/storage';
 
 interface AuthContextType {
   user: User | null;
@@ -49,16 +50,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
       console.log('Auth event:', event, session?.user?.email || 'no user');
-      
+
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
 
+      // Reset storage provider when auth state changes
+      // This ensures users switch from localStorage to Supabase on login
+      // and back to localStorage on logout
+      StorageFactory.resetInstance();
+
       // Handle specific auth events
       if (event === 'SIGNED_IN') {
         console.log('User signed in:', session?.user?.email);
+        console.log('Storage provider reset - now using Supabase');
       } else if (event === 'SIGNED_OUT') {
         console.log('User signed out');
+        console.log('Storage provider reset - now using localStorage');
       } else if (event === 'TOKEN_REFRESHED') {
         console.log('Token refreshed for:', session?.user?.email);
       } else if (event === 'USER_UPDATED') {

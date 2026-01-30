@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import Image from 'next/image';
 import { GridState, GameState, GameScore, Winner, ParticipantPayment, UserSubscription } from '@/types';
 import { defaultPayoutTemplates, calculatePayouts, calculatePayoutsWithNoRepeat } from '@/lib/payout-templates';
 import { StorageFactory, getFeatures, SupabaseProvider } from '@/lib/storage';
@@ -11,6 +12,7 @@ import { exportToExcel } from '@/lib/excel-export';
 import { generatePDF } from '@/lib/pdf-export';
 import { GameDayManager } from '@/lib/game-day';
 import { useAuth } from '@/contexts/AuthContext';
+import logo from '@/assets/with_the_grid_logo.png';
 
 export default function GridPage() {
   const router = useRouter();
@@ -875,6 +877,15 @@ export default function GridPage() {
         <div className="max-w-7xl mx-auto px-4 py-5">
           <div className="flex justify-between items-center gap-4">
             <div className="hidden md:flex items-center gap-4">
+              <Link href="/" className="flex items-center gap-2">
+                <Image
+                  src={logo}
+                  alt="Win The Grid logo"
+                  width={28}
+                  height={28}
+                  className="h-7 w-7"
+                />
+              </Link>
               <Link
                 href="/"
                 className="text-blue-600 hover:text-blue-800 font-medium transition-colors duration-200 flex items-center gap-2"
@@ -938,6 +949,13 @@ export default function GridPage() {
               )}
             </div>
             <div className="flex items-center gap-2 md:hidden min-w-0">
+              <Image
+                src={logo}
+                alt="Win The Grid logo"
+                width={22}
+                height={22}
+                className="h-5 w-5"
+              />
               <span className="text-lg font-semibold text-gray-900 truncate">
                 Create &amp; Manage Grid (Guest)
               </span>

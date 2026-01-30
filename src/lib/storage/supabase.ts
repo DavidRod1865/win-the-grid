@@ -116,17 +116,24 @@ export class SupabaseProvider implements StorageProvider {
 
   async loadGrid(gridId: string): Promise<GridState | null> {
     try {
+      // Note: RLS policies automatically filter grids based on ownership or share status
+      // Users can only load grids they own OR premium grids with share codes
       const { data, error } = await this.supabase
         .from('grids')
         .select('*')
         .eq('id', gridId)
         .single();
-      
+
       if (error) {
         console.error('Failed to load grid:', error);
         return null;
       }
-      
+
+      if (!data) {
+        console.warn('Grid not found or access denied:', gridId);
+        return null;
+      }
+
       return this.transformSupabaseToGridState(data);
     } catch (error) {
       console.error('Error loading grid:', error);

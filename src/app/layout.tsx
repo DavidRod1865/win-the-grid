@@ -3,6 +3,10 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
 
+// Validate environment variables at startup
+// This will throw an error if any required variables are missing or invalid
+import '@/lib/env';
+
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],

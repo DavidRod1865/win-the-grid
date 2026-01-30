@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, use } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import Image from 'next/image';
 import { GridState, GameState, GameScore, Winner, ParticipantPayment, UserSubscription } from '@/types';
 import { defaultPayoutTemplates, calculatePayouts, calculatePayoutsWithNoRepeat } from '@/lib/payout-templates';
 import { StorageFactory, getFeatures, SupabaseProvider } from '@/lib/storage';
@@ -15,6 +16,7 @@ import UserMenu from '@/components/ui/UserMenu';
 import UnlockSharingModal from '@/components/payment/UnlockSharingModal';
 import ShareModal from '@/components/grid/ShareModal';
 import { analytics } from '@/lib/analytics';
+import logo from '@/assets/with_the_grid_logo.png';
 
 interface EditGridPageProps {
   params: Promise<{
@@ -257,32 +259,38 @@ export default function EditGridPage({ params }: EditGridPageProps) {
           try {
             const supabaseProvider = new SupabaseProvider();
             const existingGrid = await supabaseProvider.loadGrid(gridId);
-            
-            if (existingGrid) {
-              console.log('Loaded existing grid from Supabase:', existingGrid.title);
-              setGridState(existingGrid);
-              
-              // Initialize custom percentages if Custom template is selected
-              if (existingGrid.selectedTemplate === 'Custom' && existingGrid.payoutRules) {
-                const customPercs: { [key: string]: number } = {};
-                existingGrid.payoutRules.forEach((rule) => {
-                  customPercs[rule.quarter] = rule.percentage;
-                });
-                setCustomPercentages({
-                  '1st Quarter': customPercs['1st Quarter'] || 25,
-                  'Halftime': customPercs['Halftime'] || 25,
-                  '3rd Quarter': customPercs['3rd Quarter'] || 25,
-                  'Final Score': customPercs['Final Score'] || 25
-                });
-              }
-              
-              // Load user grids for any dropdowns
-              const userGrids = await supabaseProvider.loadUserGrids();
-              setUserGrids(userGrids);
-            } else {
-              console.log('Grid not found, creating empty grid with ID:', gridId);
-              setGridState(createEmptyGrid());
+
+            if (!existingGrid) {
+              setError('Grid not found or you do not have permission to access it');
+              return;
             }
+
+            // Verify ownership (RLS already filters, but this provides better UX)
+            if (existingGrid.ownership?.ownerId && existingGrid.ownership.ownerId !== user.id) {
+              setError('You do not have permission to edit this grid');
+              return;
+            }
+
+            console.log('Loaded existing grid from Supabase:', existingGrid.title);
+            setGridState(existingGrid);
+
+            // Initialize custom percentages if Custom template is selected
+            if (existingGrid.selectedTemplate === 'Custom' && existingGrid.payoutRules) {
+              const customPercs: { [key: string]: number } = {};
+              existingGrid.payoutRules.forEach((rule) => {
+                customPercs[rule.quarter] = rule.percentage;
+              });
+              setCustomPercentages({
+                '1st Quarter': customPercs['1st Quarter'] || 25,
+                'Halftime': customPercs['Halftime'] || 25,
+                '3rd Quarter': customPercs['3rd Quarter'] || 25,
+                'Final Score': customPercs['Final Score'] || 25
+              });
+            }
+
+            // Load user grids for any dropdowns
+            const userGrids = await supabaseProvider.loadUserGrids();
+            setUserGrids(userGrids);
           } catch (error) {
             console.error('Error loading grid from Supabase:', error);
             setGridState(createEmptyGrid());
@@ -1011,99 +1019,111 @@ export default function EditGridPage({ params }: EditGridPageProps) {
       {/* Content */}
       <div className="relative z-10">
       <header className="bg-white/90 backdrop-blur-md border-b border-white/20 sticky top-0 z-40 shadow-lg">
-        <div className="max-w-7xl mx-auto px-4 py-5">
+        <div className="max-w-7xl mx-auto px-6 py-4">
           <div className="flex justify-between items-center gap-4">
-            <div className="hidden md:flex items-center gap-4">
-              {user && (
-                <Link
-                  href="/grids"
-                  className="text-blue-600 hover:text-blue-800 font-medium transition-colors duration-200 flex items-center gap-2"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                  </svg>
-                  My Grids
-                </Link>
-              )}
-              {userGrids.length > 1 && (
-                <div className="relative grids-dropdown-container">
-                  <button
-                    onClick={() => setShowGridsDropdown(!showGridsDropdown)}
-                    className="flex items-center gap-2 px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-md font-medium text-sm text-gray-700 transition-colors"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-                    </svg>
-                    <span>{gridState.title || 'Super Bowl LX'}</span>
-                    {gridState.ownership?.isPremium && (
-                      <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
-                        Premium
-                      </span>
-                    )}
-                    <svg className={`w-4 h-4 transition-transform ${showGridsDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
-                  </button>
-                  {showGridsDropdown && (
-                    <div className="absolute top-full left-0 mt-2 w-64 bg-white rounded-lg shadow-lg border border-gray-200 z-50 max-h-96 overflow-y-auto">
-                      <div className="p-2">
-                        <div className="px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wide border-b border-gray-200 mb-1">
-                          Your Grids ({userGrids.length})
-                        </div>
-                        {userGrids.map((grid) => (
-                          <button
-                            key={grid.id}
-                            onClick={() => handleSwitchGrid(grid.id || '')}
-                            className={`w-full text-left px-3 py-2 rounded-md hover:bg-gray-100 transition-colors ${
-                              grid.id === gridState.id ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-700'
-                            }`}
-                          >
-                            <div className="font-medium">{grid.title || 'Untitled Grid'}</div>
-                            <div className="text-xs text-gray-500 mt-0.5">
-                              {grid.boxes.filter(b => b.name.trim()).length} participants
-                              {grid.numbersGenerated && ' • Numbers generated'}
+            <div className="hidden md:flex items-center gap-3">
+              <Link href="/" className="flex items-center gap-2">
+                <Image
+                  src={logo}
+                  alt="Win The Grid logo"
+                  width={28}
+                  height={28}
+                  className="h-7 w-7"
+                />
+              </Link>
+              <div className="flex flex-col">
+                {user && (
+                  <div className="flex items-center gap-2 text-xs text-gray-500">
+                    <Link href="/grids" className="hover:text-gray-700 transition-colors">
+                      My Grids
+                    </Link>
+                    <span className="text-gray-300">/</span>
+                    <span className="text-gray-500">Edit</span>
+                  </div>
+                )}
+                <div className="flex items-center gap-2">
+                  {userGrids.length > 1 ? (
+                    <div className="relative grids-dropdown-container">
+                      <button
+                        onClick={() => setShowGridsDropdown(!showGridsDropdown)}
+                        className="flex items-center gap-2 px-3 py-2 bg-gray-50 hover:bg-gray-100 rounded-md border border-gray-200 font-medium text-sm text-gray-800 transition-colors"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                        </svg>
+                        <span>{gridState.title || 'Super Bowl LX'}</span>
+                        {gridState.ownership?.isPremium && (
+                          <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
+                            Premium
+                          </span>
+                        )}
+                        <svg className={`w-4 h-4 transition-transform ${showGridsDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </button>
+                      {showGridsDropdown && (
+                        <div className="absolute top-full left-0 mt-2 w-64 bg-white rounded-lg shadow-lg border border-gray-200 z-50 max-h-96 overflow-y-auto">
+                          <div className="p-2">
+                            <div className="px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wide border-b border-gray-200 mb-1">
+                              Your Grids ({userGrids.length})
                             </div>
-                          </button>
-                        ))}
-                      </div>
+                            {userGrids.map((grid) => (
+                              <button
+                                key={grid.id}
+                                onClick={() => handleSwitchGrid(grid.id || '')}
+                                className={`w-full text-left px-3 py-2 rounded-md hover:bg-gray-100 transition-colors ${
+                                  grid.id === gridState.id ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-700'
+                                }`}
+                              >
+                                <div className="font-medium">{grid.title || 'Untitled Grid'}</div>
+                                <div className="text-xs text-gray-500 mt-0.5">
+                                  {grid.boxes.filter(b => b.name.trim()).length} participants
+                                  {grid.numbersGenerated && ' • Numbers generated'}
+                                </div>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
+                  ) : (
+                    <h1 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                      {gridState.title || 'Super Bowl LX'} Squares Calculator
+                      {gridState.ownership?.isPremium && (
+                        <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
+                          Premium
+                        </span>
+                      )}
+                    </h1>
                   )}
                 </div>
-              )}
-              {userGrids.length <= 1 && (
-                <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-                  {gridState.title || 'Super Bowl LX'} Squares Calculator
-                  {gridState.ownership?.isPremium && (
-                    <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700">
-                      Premium
-                    </span>
-                  )}
-                </h1>
-              )}
+              </div>
             </div>
             <div className="flex items-center gap-2 md:hidden min-w-0">
+              <Image
+                src={logo}
+                alt="Win The Grid logo"
+                width={22}
+                height={22}
+                className="h-5 w-5"
+              />
               <span className="text-lg font-semibold text-gray-900 truncate">
                 {gridState.title || 'Super Bowl LX'}
               </span>
               {gridState.ownership?.isPremium && (
-                <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
+                <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
                   Premium
                 </span>
               )}
             </div>
             <div className="hidden md:flex items-center gap-3">
               <Link
-                href="/?join=1"
-                className="text-blue-600 hover:text-blue-800 font-medium transition-colors duration-200 hover:underline"
-              >
-                Enter Share Code
-              </Link>
-              <Link
                 href="/how-to-play"
-                className="text-blue-600 hover:text-blue-800 font-medium transition-colors duration-200 hover:underline"
+                className="text-sm text-gray-600 hover:text-gray-900 font-medium transition-colors duration-200"
               >
                 How to Play
               </Link>
+              <div className="h-5 w-px bg-gray-200"></div>
               {user && <UserMenu />}
               <button
                 onClick={handleShareGrid}
@@ -1118,7 +1138,7 @@ export default function EditGridPage({ params }: EditGridPageProps) {
                 {sharingInProgress ? 'Sharing...' : features.canShare ? 'Share Grid' : 'Share (Premium)'}
               </button>
               <details className="relative">
-                <summary className="list-none py-2 px-4 rounded-md font-medium transition-all duration-200 hover:shadow-lg text-sm bg-blue-600 hover:bg-blue-700 text-white cursor-pointer">
+                <summary className="list-none py-2 px-4 rounded-md border border-gray-300 text-gray-700 bg-white hover:bg-gray-50 font-medium transition-all duration-200 text-sm cursor-pointer">
                   Export
                 </summary>
                 <div className="absolute right-0 mt-2 w-48 rounded-md border border-gray-200 bg-white shadow-lg p-2 flex flex-col gap-1">
@@ -1235,13 +1255,6 @@ export default function EditGridPage({ params }: EditGridPageProps) {
                     {gridState.title || 'Super Bowl LX'} Squares Calculator
                   </div>
                 )}
-                <Link
-                  href="/?join=1"
-                  onClick={() => setShowMobileMenu(false)}
-                  className="text-blue-600 hover:text-blue-800 font-medium transition-colors duration-200"
-                >
-                  Enter Share Code
-                </Link>
                 <Link
                   href="/how-to-play"
                   onClick={() => setShowMobileMenu(false)}

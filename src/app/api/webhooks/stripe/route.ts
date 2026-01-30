@@ -248,9 +248,22 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  console.log('Received Stripe event:', event.type);
+  console.log('Received Stripe event:', event.type, event.id);
 
   try {
+    // Check if this webhook event has already been processed (idempotency)
+    const { data: existingEvent } = await supabase
+      .from('webhook_events')
+      .select('id')
+      .eq('stripe_event_id', event.id)
+      .single();
+
+    if (existingEvent) {
+      console.log(`Webhook ${event.id} already processed, skipping to prevent duplicates`);
+      return NextResponse.json({ received: true, duplicate: true });
+    }
+
+    // Process the webhook event
     switch (event.type) {
       case 'checkout.session.completed':
         await handleCheckoutCompleted(event.data.object as Stripe.Checkout.Session);
@@ -272,6 +285,13 @@ export async function POST(req: NextRequest) {
         console.log(`Unhandled event type: ${event.type}`);
     }
 
+    // Mark webhook as processed (idempotency)
+    await supabase.from('webhook_events').insert({
+      stripe_event_id: event.id,
+      event_type: event.type,
+    });
+
+    console.log(`Webhook ${event.id} processed successfully`);
     return NextResponse.json({ received: true });
   } catch (error) {
     console.error('Error processing webhook:', error);

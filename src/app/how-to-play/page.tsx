@@ -1,7 +1,9 @@
 'use client';
 
 import Link from 'next/link';
+import Image from 'next/image';
 import { useState } from 'react';
+import logo from '@/assets/with_the_grid_logo.png';
 
 export default function HowToPlay() {
   const [isSetupSectionOpen, setIsSetupSectionOpen] = useState(false);
@@ -31,10 +33,24 @@ export default function HowToPlay() {
         <div className="max-w-7xl mx-auto px-4 py-4">
           <div className="flex justify-between items-center gap-4">
             <h1 className="hidden md:flex text-2xl font-bold text-gray-900 items-center gap-2">
-              🏈 Win The Grid - How to Play Football Squares
+              <Image
+                src={logo}
+                alt="Win The Grid logo"
+                width={32}
+                height={32}
+                className="h-8 w-8"
+              />
+              <span>Win The Grid - How to Play Football Squares</span>
             </h1>
-            <h1 className="md:hidden text-lg font-bold text-gray-900 truncate">
-              🏈 How to Play
+            <h1 className="md:hidden text-lg font-bold text-gray-900 truncate flex items-center gap-2">
+              <Image
+                src={logo}
+                alt="Win The Grid logo"
+                width={24}
+                height={24}
+                className="h-6 w-6"
+              />
+              <span>How to Play</span>
             </h1>
             <div className="hidden md:flex items-center gap-4">
               <Link

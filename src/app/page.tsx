@@ -1,10 +1,12 @@
 'use client';
 
 import Link from 'next/link';
+import Image from 'next/image';
 import { useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import UserMenu from '@/components/ui/UserMenu';
 import { useAuth } from '@/contexts/AuthContext';
+import logo from '@/assets/with_the_grid_logo.png';
 
 function LandingPageContent() {
   const router = useRouter();
@@ -49,7 +51,15 @@ function LandingPageContent() {
         <div className="max-w-7xl mx-auto px-4 py-4">
           <div className="flex justify-between items-center gap-4">
             <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-              🏈 Win The Grid
+              <Image
+                src={logo}
+                alt="Win The Grid logo"
+                width={32}
+                height={32}
+                className="h-8 w-8"
+                priority
+              />
+              <span>Win The Grid</span>
             </h1>
             <div className="hidden md:flex items-center gap-4">
               <button
