@@ -655,10 +655,9 @@ export default function EditGridPage({ params }: EditGridPageProps) {
       away_score: game.scores?.away || 0,
     });
 
-    // Update grid to reference this game
+    // Update grid to reference this game (but don't change the title)
     const newState = {
       ...gridState,
-      title: game.title,
       gameId: game.gameId,
       homeTeamName: game.homeTeam.name,
       awayTeamName: game.awayTeam.name,
@@ -2294,7 +2293,7 @@ export default function EditGridPage({ params }: EditGridPageProps) {
             <div className="space-y-4">
               {/* Quick Setup - Select Game */}
               <div className="p-3 bg-gradient-to-r from-blue-50 to-purple-50 border border-blue-200 rounded-lg">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between mb-3">
                   <div>
                     <h4 className="text-sm font-semibold text-black mb-1">Quick Setup</h4>
                     <p className="text-xs text-gray-600">Select a real game to auto-fill team details</p>
@@ -2306,10 +2305,32 @@ export default function EditGridPage({ params }: EditGridPageProps) {
                     Select Game
                   </button>
                 </div>
+
+                {/* Display Selected Game */}
+                {gridState.gameId && (
+                  <div className="pt-3 border-t border-blue-200">
+                    <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-2 flex-1">
+                        {gridState.awayTeamLogo && (
+                          <img src={gridState.awayTeamLogo} alt={gridState.awayTeamName} className="w-8 h-8 object-contain" />
+                        )}
+                        <span className="text-sm font-medium text-gray-900">{gridState.awayTeamName}</span>
+                      </div>
+                      <span className="text-xs text-gray-500">@</span>
+                      <div className="flex items-center gap-2 flex-1 justify-end">
+                        <span className="text-sm font-medium text-gray-900">{gridState.homeTeamName}</span>
+                        {gridState.homeTeamLogo && (
+                          <img src={gridState.homeTeamLogo} alt={gridState.homeTeamName} className="w-8 h-8 object-contain" />
+                        )}
+                      </div>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-2 text-center">Selected game teams will auto-populate below</p>
+                  </div>
+                )}
               </div>
 
               <div>
-                <h4 className="text-sm font-semibold text-gray-700 mb-2">Game Title</h4>
+                <h4 className="text-sm font-semibold text-gray-700 mb-2">Grid Title</h4>
                 <input
                   type="text"
                   value={gridState.title || 'Super Bowl LX'}
@@ -2318,7 +2339,7 @@ export default function EditGridPage({ params }: EditGridPageProps) {
                   }}
                   className="w-full px-3 py-2.5 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-black transition-all duration-200"
                   placeholder="Super Bowl LX"
-                  aria-label="Game title"
+                  aria-label="Grid title"
                 />
                 <p className="text-xs text-gray-500 mt-1">
                   This title appears in the header and exports

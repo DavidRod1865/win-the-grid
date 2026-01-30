@@ -70,7 +70,14 @@ export async function GET(request: NextRequest) {
       return gameDate >= todayEST;
     });
 
-    return NextResponse.json({ games });
+    return NextResponse.json(
+      { games },
+      {
+        headers: {
+          'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400',
+        },
+      }
+    );
   } catch (error) {
     console.error('Error fetching games:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to fetch games';

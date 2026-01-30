@@ -3,9 +3,59 @@ import { StorageProvider, FeatureFlags, StorageType } from './types';
 import { supabase } from '../supabase';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
+// Simple in-memory cache with TTL
+interface CacheEntry<T> {
+  data: T;
+  timestamp: number;
+  ttl: number;
+}
+
+class SupabaseCache {
+  private cache = new Map<string, CacheEntry<any>>();
+
+  set<T>(key: string, data: T, ttl: number = 60000) {
+    this.cache.set(key, {
+      data,
+      timestamp: Date.now(),
+      ttl,
+    });
+  }
+
+  get<T>(key: string): T | null {
+    const entry = this.cache.get(key);
+    if (!entry) return null;
+
+    if (Date.now() - entry.timestamp > entry.ttl) {
+      this.cache.delete(key);
+      return null;
+    }
+
+    return entry.data as T;
+  }
+
+  invalidate(key: string) {
+    this.cache.delete(key);
+  }
+
+  invalidatePattern(pattern: string) {
+    const keys = Array.from(this.cache.keys());
+    keys.forEach(key => {
+      if (key.includes(pattern)) {
+        this.cache.delete(key);
+      }
+    });
+  }
+
+  clear() {
+    this.cache.clear();
+  }
+}
+
+const cache = new SupabaseCache();
+
 export class SupabaseProvider implements StorageProvider {
   private supabase: SupabaseClient;
-  
+
   constructor() {
     this.supabase = supabase;
     console.log('SupabaseProvider: Initialized with Supabase client');
@@ -70,16 +120,18 @@ export class SupabaseProvider implements StorageProvider {
 
   async saveGrid(gridState: GridState): Promise<string> {
     const { MigrationTransformer } = await import('./migration');
-    
+
     // Get current user
     const { data: { user }, error: authError } = await this.supabase.auth.getUser();
     if (authError || !user) {
       throw new Error('User must be authenticated to save grid');
     }
-    
+
     // Transform data for Supabase
     const supabaseData = MigrationTransformer.transformGridForSupabase(gridState);
-    
+
+    let gridId: string;
+
     if (gridState.id && gridState.id !== 'local-grid') {
       // Update existing grid
       const { error } = await this.supabase
@@ -102,20 +154,33 @@ export class SupabaseProvider implements StorageProvider {
         })
         .eq('id', gridState.id)
         .eq('created_by', user.id);
-      
+
       if (error) {
         console.error('Save grid error:', error);
         throw new Error(`Failed to save grid: ${error.message}`);
       }
-      return gridState.id;
+      gridId = gridState.id;
     } else {
       // Create new grid - use the same logic as migrateLocalStorageGrid
-      return this.migrateLocalStorageGrid(gridState);
+      gridId = await this.migrateLocalStorageGrid(gridState);
     }
+
+    // Invalidate cache after save
+    cache.invalidate(`grid:${gridId}`);
+    cache.invalidatePattern('grids:list');
+
+    return gridId;
   }
 
   async loadGrid(gridId: string): Promise<GridState | null> {
     try {
+      // Check cache first
+      const cached = cache.get<GridState>(`grid:${gridId}`);
+      if (cached) {
+        console.log('Cache hit for grid:', gridId);
+        return cached;
+      }
+
       // Note: RLS policies automatically filter grids based on ownership or share status
       // Users can only load grids they own OR premium grids with share codes
       const { data, error } = await this.supabase
@@ -134,7 +199,12 @@ export class SupabaseProvider implements StorageProvider {
         return null;
       }
 
-      return this.transformSupabaseToGridState(data);
+      const gridState = this.transformSupabaseToGridState(data);
+
+      // Cache for 30 seconds
+      cache.set(`grid:${gridId}`, gridState, 30000);
+
+      return gridState;
     } catch (error) {
       console.error('Error loading grid:', error);
       return null;
@@ -145,10 +215,18 @@ export class SupabaseProvider implements StorageProvider {
     try {
       // Get current user
       const { data: { user }, error: authError } = await this.supabase.auth.getUser();
-      
+
       if (authError || !user) {
         console.warn('User not authenticated for loading grids');
         return [];
+      }
+
+      // Check cache first
+      const cacheKey = `grids:list:${user.id}`;
+      const cached = cache.get<GridState[]>(cacheKey);
+      if (cached) {
+        console.log('Cache hit for user grids list');
+        return cached;
       }
 
       // Load all grids created by this user
@@ -168,7 +246,12 @@ export class SupabaseProvider implements StorageProvider {
       }
 
       // Transform each grid back to GridState format
-      return data.map(grid => this.transformSupabaseToGridState(grid));
+      const grids = data.map(grid => this.transformSupabaseToGridState(grid));
+
+      // Cache for 30 seconds
+      cache.set(cacheKey, grids, 30000);
+
+      return grids;
     } catch (error) {
       console.error('Error loading user grids:', error);
       return [];

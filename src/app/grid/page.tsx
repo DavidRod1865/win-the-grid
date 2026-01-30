@@ -202,19 +202,44 @@ export default function GridPage() {
         // Check URL parameters first
         const urlParams = new URLSearchParams(window.location.search);
         const gridIdFromUrl = urlParams.get('gridId');
-        
-        // If no gridId in URL, this is "Create New Grid" - keep empty state
-        if (!gridIdFromUrl) {
-          console.log('No gridId in URL - creating new grid');
-          return;
-        }
-        
+
         // Grid page is for anonymous users only - use localStorage
         const provider = StorageFactory.getInstance();
-        
+
+        // If no gridId in URL, try to load the most recent grid
+        if (!gridIdFromUrl) {
+          console.log('No gridId in URL - checking for existing grids');
+
+          // Load user grids list (if provider supports it)
+          if (provider.loadUserGrids) {
+            try {
+              const allGrids = await provider.loadUserGrids();
+              setUserGrids(allGrids);
+
+              // If user has grids, load the most recent one
+              if (allGrids.length > 0) {
+                const mostRecent = allGrids[0]; // Grids are already sorted by updated_at desc
+                console.log('Loading most recent grid:', mostRecent.id);
+                loadGridState(mostRecent);
+
+                // Update URL with the loaded grid ID
+                const url = new URL(window.location.href);
+                url.searchParams.set('gridId', mostRecent.id!);
+                window.history.replaceState({}, '', url.toString());
+                return;
+              }
+            } catch (error) {
+              console.error('Failed to load user grids list:', error);
+            }
+          }
+
+          console.log('No existing grids - creating new grid');
+          return;
+        }
+
         // Try to load the specific grid by ID
         const savedState = await provider.loadGrid(gridIdFromUrl);
-        
+
         if (savedState) {
           console.log('Loaded grid:', savedState.id, savedState.title);
           loadGridState(savedState);
@@ -222,7 +247,7 @@ export default function GridPage() {
           console.warn('Grid not found:', gridIdFromUrl);
           // Grid not found, but keep the empty state for new grid creation
         }
-        
+
         // Load user grids list for dropdown (if provider supports it)
         if (provider.loadUserGrids) {
           try {
@@ -232,7 +257,7 @@ export default function GridPage() {
             console.error('Failed to load user grids list:', error);
           }
         }
-        
+
       } catch (error) {
         console.error('Failed to load grid state:', error);
         // Keep empty state on error for new grid creation
@@ -588,22 +613,29 @@ export default function GridPage() {
       away_score: game.scores?.away || 0,
     });
 
-    // Update grid to reference this game
+    // Update grid to reference this game (but don't change the title)
     const newState = {
       ...gridState,
-      title: game.title,
       gameId: game.gameId,
       homeTeamName: game.homeTeam.name,
       awayTeamName: game.awayTeam.name,
       homeTeamLogo: game.homeTeam.logo,
       awayTeamLogo: game.awayTeam.logo,
     };
-    setGridState(newState);
     setShowGamePicker(false);
 
     // Auto-save grid
     try {
-      await StorageFactory.getInstance().saveGrid(newState);
+      const savedGridId = await StorageFactory.getInstance().saveGrid(newState);
+
+      // Update state with the saved grid ID
+      const stateWithId = { ...newState, id: savedGridId };
+      setGridState(stateWithId);
+
+      // Update URL to include gridId so refresh works
+      const url = new URL(window.location.href);
+      url.searchParams.set('gridId', savedGridId);
+      window.history.replaceState({}, '', url.toString());
     } catch (error) {
       console.error('Failed to save grid state:', error);
     }
@@ -2151,7 +2183,7 @@ export default function GridPage() {
             <div className="space-y-4">
               {/* Quick Setup - Select Game */}
               <div className="p-3 bg-gradient-to-r from-blue-50 to-purple-50 border border-blue-200 rounded-lg">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between mb-3">
                   <div>
                     <h4 className="text-sm font-semibold text-black mb-1">Quick Setup</h4>
                     <p className="text-xs text-gray-600">Select a real game to auto-fill team details</p>
@@ -2163,10 +2195,32 @@ export default function GridPage() {
                     Select Game
                   </button>
                 </div>
+
+                {/* Display Selected Game */}
+                {gridState.gameId && (
+                  <div className="pt-3 border-t border-blue-200">
+                    <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-2 flex-1">
+                        {gridState.awayTeamLogo && (
+                          <img src={gridState.awayTeamLogo} alt={gridState.awayTeamName} className="w-8 h-8 object-contain" />
+                        )}
+                        <span className="text-sm font-medium text-gray-900">{gridState.awayTeamName}</span>
+                      </div>
+                      <span className="text-xs text-gray-500">@</span>
+                      <div className="flex items-center gap-2 flex-1 justify-end">
+                        <span className="text-sm font-medium text-gray-900">{gridState.homeTeamName}</span>
+                        {gridState.homeTeamLogo && (
+                          <img src={gridState.homeTeamLogo} alt={gridState.homeTeamName} className="w-8 h-8 object-contain" />
+                        )}
+                      </div>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-2 text-center">Selected game teams will auto-populate below</p>
+                  </div>
+                )}
               </div>
 
               <div>
-                <h4 className="text-sm font-semibold text-gray-700 mb-2">Game Title</h4>
+                <h4 className="text-sm font-semibold text-gray-700 mb-2">Grid Title</h4>
                 <input
                   type="text"
                   value={gridState.title || 'Super Bowl LX'}
@@ -2182,7 +2236,7 @@ export default function GridPage() {
                   }}
                   className="w-full px-3 py-2.5 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-black transition-all duration-200"
                   placeholder="Super Bowl LX"
-                  aria-label="Game title"
+                  aria-label="Grid title"
                 />
                 <p className="text-xs text-gray-500 mt-1">
                   This title appears in the header and exports

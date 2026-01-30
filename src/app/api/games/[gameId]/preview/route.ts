@@ -38,15 +38,22 @@ export async function GET(
       ? Math.round(h2hData.response.reduce((sum: number, g: any) => sum + (g.scores.away.total || 0), 0) / h2hData.response.length)
       : 0;
 
-    return NextResponse.json({
-      h2h: h2hData.response.length > 0
-        ? `${game.teams.home.name} ${homeWins} - ${awayWins} ${game.teams.away.name}`
-        : 'No previous matchups',
-      avgScore: h2hData.response.length > 0
-        ? `${avgHomeScore} - ${avgAwayScore}`
-        : 'N/A',
-      recent: h2hData.response.slice(0, 5),
-    });
+    return NextResponse.json(
+      {
+        h2h: h2hData.response.length > 0
+          ? `${game.teams.home.name} ${homeWins} - ${awayWins} ${game.teams.away.name}`
+          : 'No previous matchups',
+        avgScore: h2hData.response.length > 0
+          ? `${avgHomeScore} - ${avgAwayScore}`
+          : 'N/A',
+        recent: h2hData.response.slice(0, 5),
+      },
+      {
+        headers: {
+          'Cache-Control': 'public, s-maxage=86400, stale-while-revalidate=604800',
+        },
+      }
+    );
   } catch (error) {
     console.error('Failed to fetch preview:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to fetch preview';
