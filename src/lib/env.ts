@@ -113,16 +113,16 @@ function validateEnv() {
     return parsed;
   } catch (error) {
     // Handle Zod validation errors
-    if (error && typeof error === 'object' && 'errors' in error) {
-      const zodError = error as z.ZodError;
+    if (error instanceof z.ZodError) {
+      const zodError = error;
 
       console.error('');
       console.error('❌ Environment validation failed:');
       console.error('');
 
       // Safely iterate over errors
-      if (Array.isArray(zodError.errors) && zodError.errors.length > 0) {
-        zodError.errors.forEach((err) => {
+      if (Array.isArray(zodError.issues) && zodError.issues.length > 0) {
+        zodError.issues.forEach((err) => {
           try {
             const path = Array.isArray(err.path) ? err.path.join('.') : String(err.path || 'unknown');
             console.error(`  ${path}: ${err.message || 'Unknown error'}`);
