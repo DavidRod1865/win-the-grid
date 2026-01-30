@@ -31,6 +31,7 @@ export default function EditGridPage({ params }: EditGridPageProps) {
 
   // Grid loading and initialization state
   const [isInitializing, setIsInitializing] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [gridState, setGridState] = useState<GridState>({
     boxes: Array.from({ length: 100 }, (_, i) => ({
       id: `box-${i}`,
@@ -962,6 +963,25 @@ export default function EditGridPage({ params }: EditGridPageProps) {
           <p className="text-gray-600">
             {user ? 'Loading your grid from the cloud...' : 'Preparing your grid...'}
           </p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show error screen if there's an error
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center max-w-md">
+          <div className="text-red-500 text-6xl mb-4">⚠️</div>
+          <h1 className="text-2xl font-bold text-black mb-2">Error</h1>
+          <p className="text-gray-600 mb-6">{error}</p>
+          <Link
+            href="/grids"
+            className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg transition-colors inline-block"
+          >
+            Back to My Grids
+          </Link>
         </div>
       </div>
     );
