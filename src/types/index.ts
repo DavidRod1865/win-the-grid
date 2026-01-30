@@ -91,18 +91,23 @@ export interface GridState {
   gameState?: GameState; // Current state of the game
   currentScores?: GameScore[]; // Score history during the game
   gameWinners?: Winner[]; // Winners for each quarter that has been scored
-  homeTeamName?: string; // Custom home team name
-  awayTeamName?: string; // Custom away team name
+  homeTeamName?: string; // Custom home team name (fallback if no game selected)
+  awayTeamName?: string; // Custom away team name (fallback if no game selected)
   sidePools?: SidePool[]; // Side pool configurations
   wentToOvertime?: boolean; // Track if game went to overtime
   sidePoolsEnabled?: boolean; // Whether side pools feature is enabled
   participantPayments?: ParticipantPayment[]; // Payment tracking for participants
-  
+
   // New ownership and access control fields
   ownership?: GridOwnership;
   accessLevel?: GridAccessLevel; // User's access level to this grid
   isViewOnly?: boolean; // Whether user is viewing via join code
   liveScoringEnabled?: boolean; // Whether live scoring is active (premium feature)
+
+  // Sports API integration fields
+  gameId?: string;              // References games.id (API-Football game ID)
+  homeTeamLogo?: string;        // Team logo URL
+  awayTeamLogo?: string;        // Team logo URL
 }
 
 export interface ExportOptions {
@@ -141,4 +146,32 @@ export interface PaymentTransaction {
   paymentMethod?: string;
   transactionDate: string; // ISO date string
   stripePaymentIntentId?: string;
+}
+
+export interface Game {
+  id: string;                      // API-Football game ID
+  league: string;                  // 'nfl', 'nba', etc.
+  season: string;                  // '2024'
+  scheduledTime: string;           // ISO datetime
+  status: string;                  // 'NS', 'LIVE', 'FT'
+
+  // Teams
+  homeTeam: {
+    name: string;
+    logo?: string;
+    abbreviation?: string;
+  };
+  awayTeam: {
+    name: string;
+    logo?: string;
+    abbreviation?: string;
+  };
+
+  // Scores (null if game hasn't started)
+  homeScore: number;
+  awayScore: number;
+  currentPeriod?: string;          // 'Q1', 'Q2', 'Half', etc.
+
+  // Metadata
+  lastScoreUpdate?: string;
 }

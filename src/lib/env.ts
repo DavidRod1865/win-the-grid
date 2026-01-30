@@ -15,7 +15,10 @@ const envSchema = z.object({
   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY: z
     .string()
     .min(1, 'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY is required')
-    .startsWith('eyJ', 'Invalid Supabase anon key format'),
+    .refine(
+      (key) => key.startsWith('eyJ') || key.startsWith('sb_publishable_'),
+      { message: 'Invalid Supabase key format (must be anon key or publishable key)' }
+    ),
 
   SUPABASE_SERVICE_ROLE_KEY: z
     .string()
@@ -88,6 +91,11 @@ const envSchema = z.object({
   NODE_ENV: z
     .enum(['development', 'production', 'test'])
     .default('development'),
+
+  // Sports API (Optional - new feature)
+  API_FOOTBALL_KEY: z
+    .string()
+    .optional(),
 });
 
 /**

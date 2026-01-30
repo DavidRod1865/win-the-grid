@@ -14,6 +14,8 @@ import { GameDayManager } from '@/lib/game-day';
 import { useAuth } from '@/contexts/AuthContext';
 import { validatePayoutPercentages } from '@/lib/utils/payout-validation';
 import logo from '@/assets/with_the_grid_logo.png';
+import GamePickerModal from '@/components/grid/GamePickerModal';
+import { supabase } from '@/lib/supabase';
 
 export default function GridPage() {
   const router = useRouter();
@@ -98,6 +100,7 @@ export default function GridPage() {
   const [participantSearch, setParticipantSearch] = useState('');
   const [paymentFilter, setPaymentFilter] = useState<'all' | 'paid' | 'not-paid'>('all');
   const dateInputRef = useRef<HTMLInputElement>(null);
+  const [showGamePicker, setShowGamePicker] = useState(false);
   
   // Custom payout percentages
   const [customPercentages, setCustomPercentages] = useState({
@@ -559,7 +562,46 @@ export default function GridPage() {
   const handlePriceChange = async (price: number) => {
     const newState = { ...gridState, pricePerBox: price > 0 ? price : 1 };
     setGridState(newState);
-    
+
+    try {
+      await StorageFactory.getInstance().saveGrid(newState);
+    } catch (error) {
+      console.error('Failed to save grid state:', error);
+    }
+  };
+
+  const handleGameSelect = async (game: any) => {
+    // First, ensure game exists in games table (upsert)
+    await supabase.from('games').upsert({
+      id: game.gameId,
+      league: 'nfl',
+      season: new Date(game.date).getFullYear().toString(),
+      scheduled_time: game.date,
+      status: game.status || 'NS',
+      home_team_name: game.homeTeam.name,
+      home_team_logo: game.homeTeam.logo,
+      home_team_abbreviation: game.homeTeam.abbreviation,
+      away_team_name: game.awayTeam.name,
+      away_team_logo: game.awayTeam.logo,
+      away_team_abbreviation: game.awayTeam.abbreviation,
+      home_score: game.scores?.home || 0,
+      away_score: game.scores?.away || 0,
+    });
+
+    // Update grid to reference this game
+    const newState = {
+      ...gridState,
+      title: game.title,
+      gameId: game.gameId,
+      homeTeamName: game.homeTeam.name,
+      awayTeamName: game.awayTeam.name,
+      homeTeamLogo: game.homeTeam.logo,
+      awayTeamLogo: game.awayTeam.logo,
+    };
+    setGridState(newState);
+    setShowGamePicker(false);
+
+    // Auto-save grid
     try {
       await StorageFactory.getInstance().saveGrid(newState);
     } catch (error) {
@@ -2107,6 +2149,22 @@ export default function GridPage() {
             </div>
             
             <div className="space-y-4">
+              {/* Quick Setup - Select Game */}
+              <div className="p-3 bg-gradient-to-r from-blue-50 to-purple-50 border border-blue-200 rounded-lg">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="text-sm font-semibold text-black mb-1">Quick Setup</h4>
+                    <p className="text-xs text-gray-600">Select a real game to auto-fill team details</p>
+                  </div>
+                  <button
+                    onClick={() => setShowGamePicker(true)}
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md font-medium transition-colors"
+                  >
+                    Select Game
+                  </button>
+                </div>
+              </div>
+
               <div>
                 <h4 className="text-sm font-semibold text-gray-700 mb-2">Game Title</h4>
                 <input
@@ -2115,7 +2173,7 @@ export default function GridPage() {
                   onChange={async (e) => {
                     const newState = { ...gridState, title: e.target.value };
                     setGridState(newState);
-                    
+
                     try {
                       await StorageFactory.getInstance().saveGrid(newState);
                     } catch (error) {
@@ -2730,6 +2788,14 @@ export default function GridPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Game Picker Modal */}
+      {showGamePicker && (
+        <GamePickerModal
+          onSelect={handleGameSelect}
+          onClose={() => setShowGamePicker(false)}
+        />
       )}
 
     </div>
