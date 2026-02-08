@@ -345,6 +345,40 @@ export const analytics = {
   },
 
   // ============================================================
+  // GAME DAY ENHANCEMENTS
+  // ============================================================
+
+  /**
+   * Track when a participant is selected to view their numbers
+   */
+  participantSelected: (gridId: string, participantName: string, boxCount: number) => {
+    posthog.capture('participant_selected', {
+      grid_id: gridId,
+      participant_name: participantName,
+      box_count: boxCount,
+    });
+  },
+
+  /**
+   * Track when grid view mode is changed (landscape/portrait)
+   */
+  gridViewChanged: (
+    gridId: string,
+    viewMode: 'landscape' | 'portrait',
+    deviceOrientation: 'landscape' | 'portrait',
+    viewportWidth?: number,
+    viewportHeight?: number
+  ) => {
+    posthog.capture('grid_view_changed', {
+      grid_id: gridId,
+      view_mode: viewMode,
+      device_orientation: deviceOrientation,
+      viewport_width: viewportWidth,
+      viewport_height: viewportHeight,
+    });
+  },
+
+  // ============================================================
   // ERRORS & ISSUES
   // ============================================================
 

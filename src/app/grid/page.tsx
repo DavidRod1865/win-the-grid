@@ -16,6 +16,12 @@ import { validatePayoutPercentages } from '@/lib/utils/payout-validation';
 import logo from '@/assets/with_the_grid_logo.png';
 import GamePickerModal from '@/components/grid/GamePickerModal';
 import { supabase } from '@/lib/supabase';
+import ParticipantNumberViewer from '@/components/grid/ParticipantNumberViewer';
+import ParticipantNumberDisplay from '@/components/grid/ParticipantNumberDisplay';
+import GridLandscapeView from '@/components/grid/GridLandscapeView';
+import { useOrientation } from '@/hooks/useOrientation';
+import { getParticipantNumbers } from '@/lib/utils/number-combinations';
+import { analytics } from '@/lib/analytics';
 
 export default function GridPage() {
   const router = useRouter();
@@ -116,7 +122,16 @@ export default function GridPage() {
   const [currentHomeScore, setCurrentHomeScore] = useState('');
   const [currentAwayScore, setCurrentAwayScore] = useState('');
   const [selectedQuarter, setSelectedQuarter] = useState('');
-  
+
+  // Personal Number Viewer state
+  const [selectedParticipant, setSelectedParticipant] = useState<string | null>(null);
+  const [highlightedBoxes, setHighlightedBoxes] = useState<number[]>([]);
+  const [participantNumbers, setParticipantNumbers] = useState<Array<{ home: number; away: number; boxIndex: number }>>([]);
+
+  // Landscape Grid View state
+  const [isLandscapeView, setIsLandscapeView] = useState(false);
+  const [landscapeSuggestionShown, setLandscapeSuggestionShown] = useState(false);
+
   // User subscription state (TODO: Get from auth provider)
   const [userSubscription, setUserSubscription] = useState<UserSubscription | null>(null);
   
@@ -145,6 +160,9 @@ export default function GridPage() {
     currentPlan: 'free',
   });
 
+  // Use orientation hook
+  const deviceIsLandscape = useOrientation();
+
   // Helper function to handle premium feature access
   const handlePremiumFeature = (action: () => void, featureName: string) => {
     try {
@@ -157,6 +175,44 @@ export default function GridPage() {
         console.error(`Failed to use ${featureName}:`, error);
       }
     }
+  };
+
+  // Participant Number Viewer handlers
+  const handleParticipantSelect = (name: string, boxIndices: number[]) => {
+    setSelectedParticipant(name);
+    setHighlightedBoxes(boxIndices);
+
+    // Calculate number combinations
+    const combinations = getParticipantNumbers(
+      boxIndices,
+      gridState.rowNumbers,
+      gridState.colNumbers
+    );
+    setParticipantNumbers(combinations);
+
+    // Track analytics
+    analytics.participantSelected('grid-page', name, boxIndices.length);
+  };
+
+  const handleParticipantClear = () => {
+    setSelectedParticipant(null);
+    setHighlightedBoxes([]);
+    setParticipantNumbers([]);
+  };
+
+  // Landscape view handler
+  const handleToggleLandscapeView = () => {
+    const newViewMode = !isLandscapeView;
+    setIsLandscapeView(newViewMode);
+
+    // Track analytics
+    analytics.gridViewChanged(
+      'grid-page',
+      newViewMode ? 'landscape' : 'portrait',
+      deviceIsLandscape ? 'landscape' : 'portrait',
+      typeof window !== 'undefined' ? window.innerWidth : undefined,
+      typeof window !== 'undefined' ? window.innerHeight : undefined
+    );
   };
 
   const promptGuestUpgrade = () => {
@@ -327,6 +383,17 @@ export default function GridPage() {
       return () => document.removeEventListener('mousedown', handleClickOutside);
     }
   }, [showGridsDropdown]);
+
+  // Show landscape suggestion when device rotates to landscape (one-time)
+  useEffect(() => {
+    if (deviceIsLandscape && !landscapeSuggestionShown && !isLandscapeView) {
+      // Only show if numbers are generated and there are participants
+      if (gridState.numbersGenerated && gridState.boxes.some(box => box.name.trim())) {
+        setLandscapeSuggestionShown(true);
+        // Could add a toast notification here in the future
+      }
+    }
+  }, [deviceIsLandscape, landscapeSuggestionShown, isLandscapeView, gridState.numbersGenerated, gridState.boxes]);
 
   // Function to switch between grids
   const handleSwitchGrid = async (gridId: string) => {
@@ -1989,23 +2056,59 @@ export default function GridPage() {
                       📊 Update Score
                     </button>
                   )}
+                  <button
+                    onClick={handleToggleLandscapeView}
+                    className="px-3 py-1 bg-purple-600 hover:bg-purple-700 text-white rounded-md text-xs font-medium transition-colors"
+                    title={isLandscapeView ? 'Switch to Portrait View' : 'Switch to Landscape View'}
+                  >
+                    {isLandscapeView ? '📱 Portrait' : '🖥️ Landscape'}
+                  </button>
                 </div>
               </div>
-              
-              <div className="overflow-x-auto">
-                <div className="inline-block min-w-full relative">
-                  
-                  {/* Payout Preview Box - Top Left Corner */}
-                  <div className="absolute top-0 left-0 w-24 h-24 md:w-28 md:h-28 lg:w-32 lg:h-32 border-2 border-gray-400 bg-white shadow-lg z-50 flex flex-col justify-start items-start text-left px-2 py-2 text-black">
-                    <div className="font-bold text-xs md:text-sm lg:text-base leading-tight mb-1">Pot: ${totalPot.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</div>
-                    <div className="text-[10px] md:text-xs lg:text-sm leading-tight space-y-0">
-                      {calculatedPayoutsWithSidePools.map((p, i) => (
-                        <div key={i} className="leading-tight">{p.quarter.split(' ')[0]}: ${p.amount.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</div>
-                      ))}
+
+              {/* Personal Number Viewer */}
+              {gridState.boxes.some(box => box.name.trim()) && (
+                <div className="mb-4 space-y-3">
+                  <ParticipantNumberViewer
+                    boxes={gridState.boxes}
+                    onParticipantSelect={handleParticipantSelect}
+                    onClear={handleParticipantClear}
+                    currentlySelected={selectedParticipant}
+                  />
+                  {selectedParticipant && (
+                    <ParticipantNumberDisplay
+                      selectedParticipant={selectedParticipant}
+                      combinations={participantNumbers}
+                      rowNumbers={gridState.rowNumbers}
+                      colNumbers={gridState.colNumbers}
+                    />
+                  )}
+                </div>
+              )}
+
+              {/* Conditional Grid View */}
+              {isLandscapeView ? (
+                <GridLandscapeView
+                  gridState={gridState}
+                  highlightedBoxes={highlightedBoxes}
+                  isViewOnly={false}
+                  compact={false}
+                />
+              ) : (
+                <div className="overflow-x-auto">
+                  <div className="inline-block min-w-full relative">
+
+                    {/* Payout Preview Box - Top Left Corner */}
+                    <div className="absolute top-0 left-0 w-24 h-24 md:w-28 md:h-28 lg:w-32 lg:h-32 border-2 border-gray-400 bg-white shadow-lg z-50 flex flex-col justify-start items-start text-left px-2 py-2 text-black">
+                      <div className="font-bold text-xs md:text-sm lg:text-base leading-tight mb-1">Pot: ${totalPot.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</div>
+                      <div className="text-[10px] md:text-xs lg:text-sm leading-tight space-y-0">
+                        {calculatedPayoutsWithSidePools.map((p, i) => (
+                          <div key={i} className="leading-tight">{p.quarter.split(' ')[0]}: ${p.amount.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</div>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                  
-                  {/* Team Name Row */}
+
+                    {/* Team Name Row */}
                   <div className="flex">
                     <div className="w-12 h-16"></div>
                     <div className="w-12 h-16"></div>
@@ -2068,16 +2171,20 @@ export default function GridPage() {
                         const isWinningBox = getWinningBoxes().includes(boxIndex);
                         const winner = gridState.gameWinners?.find(w => w.boxIndex === boxIndex);
                         
+                        const isHighlighted = highlightedBoxes.includes(boxIndex);
+
                         return (
                           <div
                             key={col}
                                   className={`flex-1 min-w-[80px] h-20 border border-gray-300 flex items-center justify-center cursor-pointer text-sm md:text-base lg:text-lg font-medium transition-all duration-200 relative ${
-                              isWinningBox 
-                                ? 'bg-yellow-200 hover:bg-yellow-300 border-yellow-500 border-2 shadow-lg' 
-                                : box.name 
-                                  ? 'bg-green-50 hover:bg-green-100 hover:shadow-md hover:border-green-400' 
+                              isWinningBox
+                                ? 'bg-yellow-200 hover:bg-yellow-300 border-yellow-500 border-2 shadow-lg'
+                                : box.name
+                                  ? 'bg-green-50 hover:bg-green-100 hover:shadow-md hover:border-green-400'
                                   : 'bg-white hover:bg-blue-50 hover:shadow-sm hover:border-blue-300'
-                            } ${isEditing ? 'ring-2 ring-yellow-400 ring-offset-1' : ''}`}
+                            } ${isEditing ? 'ring-2 ring-yellow-400 ring-offset-1' : ''} ${
+                              isHighlighted ? 'ring-4 ring-blue-500 ring-offset-2' : ''
+                            }`}
                             onClick={() => !isEditing && handleBoxClick(box.id)}
                             role="button"
                             tabIndex={0}
@@ -2133,14 +2240,15 @@ export default function GridPage() {
                     </div>
                   </div>
                 </div>
+                <div className="mt-4 p-3 bg-blue-50/90 backdrop-blur-sm border border-blue-200/50 rounded-md">
+                  <p className="text-sm text-blue-900 font-medium mb-1">How to use</p>
+                  <p className="text-xs text-blue-800">
+                    Click any box to add a participant name. Fill all 100 boxes to enable number generation.
+                  </p>
+                </div>
               </div>
-              
-              <div className="mt-4 p-3 bg-blue-50/90 backdrop-blur-sm border border-blue-200/50 rounded-md">
-                <p className="text-sm text-blue-900 font-medium mb-1">How to use</p>
-                <p className="text-xs text-blue-800">
-                  Click any box to add a participant name. Fill all 100 boxes to enable number generation.
-                </p>
-              </div>
+              )}
+              {/* End conditional grid view */}
             </div>
           </div>
 
