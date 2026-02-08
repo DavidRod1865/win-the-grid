@@ -17,7 +17,7 @@ export default function GridLandscapeView({
   isViewOnly = false,
   compact = false,
 }: GridLandscapeViewProps) {
-  const { boxes, rowNumbers, colNumbers, gameWinners, homeTeamName, awayTeamName } = gridState;
+  const { boxes, rowNumbers, colNumbers, gameWinners, homeTeamName, awayTeamName, numbersGenerated } = gridState;
 
   // Check if a box is a winner
   const isWinner = (boxIndex: number): { isWinner: boolean; quarter?: string } => {
@@ -62,12 +62,12 @@ export default function GridLandscapeView({
             </div>
             <div className="flex gap-0">
               <div className={`${boxSize} mr-1`}></div>
-              {colNumbers.map((num, index) => (
+              {Array.from({ length: 10 }).map((_, index) => (
                 <div
                   key={index}
                   className={`${boxSize} flex items-center justify-center font-bold bg-blue-500 text-white border border-blue-600`}
                 >
-                  {num}
+                  {numbersGenerated ? colNumbers[index] : ''}
                 </div>
               ))}
             </div>
@@ -84,12 +84,12 @@ export default function GridLandscapeView({
                 {homeTeamName}
               </div>
               <div className="flex flex-col gap-0">
-                {rowNumbers.map((num, index) => (
+                {Array.from({ length: 10 }).map((_, index) => (
                   <div
                     key={index}
                     className={`${boxSize} flex items-center justify-center font-bold bg-green-500 text-white border border-green-600`}
                   >
-                    {num}
+                    {numbersGenerated ? rowNumbers[index] : ''}
                   </div>
                 ))}
               </div>
