@@ -587,18 +587,32 @@ export default function EditGridPage({ params }: EditGridPageProps) {
   };
 
   const handleGenerateNumbers = async () => {
+    const rowNumbers = LocalStorageProvider.generateRandomNumbers();
+    const colNumbers = LocalStorageProvider.generateRandomNumbers();
+
+    console.log('Generating numbers:', { rowNumbers, colNumbers });
+
     const newState = {
       ...gridState,
-      rowNumbers: LocalStorageProvider.generateRandomNumbers(),
-      colNumbers: LocalStorageProvider.generateRandomNumbers(),
+      rowNumbers,
+      colNumbers,
       numbersGenerated: true
     };
     setGridState(newState);
-    
+
     try {
-      await StorageFactory.getInstance().saveGrid(newState);
+      console.log('Saving grid with numbers:', {
+        id: newState.id,
+        numbersGenerated: newState.numbersGenerated,
+        rowNumbersLength: newState.rowNumbers?.length,
+        colNumbersLength: newState.colNumbers?.length
+      });
+
+      const savedId = await StorageFactory.getInstance().saveGrid(newState);
+      console.log('Grid saved successfully with ID:', savedId);
     } catch (error) {
-      console.error('Failed to save grid state:', error);
+      console.error('Failed to save grid with numbers:', error);
+      alert('Failed to save numbers. Please try again.');
     }
   };
 

@@ -131,29 +131,41 @@ export class SupabaseProvider implements StorageProvider {
     // Transform data for Supabase
     const supabaseData = MigrationTransformer.transformGridForSupabase(gridState);
 
+    console.log('[SupabaseProvider] Transformed data for save:', {
+      gridId: gridState.id,
+      numbersGenerated: supabaseData.numbers_generated,
+      rowNumbers: supabaseData.row_numbers,
+      colNumbers: supabaseData.col_numbers
+    });
+
     let gridId: string;
 
     if (gridState.id && gridState.id !== 'local-grid') {
       // Update existing grid
+      const updateData = {
+        title: supabaseData.title,
+        game_id: gridState.gameId,
+        price_per_box: supabaseData.price_per_box,
+        payout_template: supabaseData.payout_template,
+        payout_rules: supabaseData.payout_rules,
+        teams: supabaseData.teams,
+        participants: supabaseData.participants,
+        row_numbers: supabaseData.row_numbers,
+        col_numbers: supabaseData.col_numbers,
+        numbers_generated: supabaseData.numbers_generated,
+        winners: supabaseData.winners,
+        current_scores: supabaseData.current_scores,
+        side_pools: supabaseData.side_pools,
+        state: supabaseData.state,
+        updated_at: new Date().toISOString()
+      };
+
+      console.log('[SupabaseProvider] Updating grid with row_numbers:', updateData.row_numbers);
+      console.log('[SupabaseProvider] Updating grid with col_numbers:', updateData.col_numbers);
+
       const { error } = await this.supabase
         .from('grids')
-        .update({
-          title: supabaseData.title,
-          game_id: gridState.gameId,
-          price_per_box: supabaseData.price_per_box,
-          payout_template: supabaseData.payout_template,
-          payout_rules: supabaseData.payout_rules,
-          teams: supabaseData.teams,
-          participants: supabaseData.participants,
-          row_numbers: supabaseData.row_numbers,
-          col_numbers: supabaseData.col_numbers,
-          numbers_generated: supabaseData.numbers_generated,
-          winners: supabaseData.winners,
-          current_scores: supabaseData.current_scores,
-          side_pools: supabaseData.side_pools,
-          state: supabaseData.state,
-          updated_at: new Date().toISOString()
-        })
+        .update(updateData)
         .eq('id', gridState.id)
         .eq('created_by', user.id);
 
@@ -162,6 +174,7 @@ export class SupabaseProvider implements StorageProvider {
         throw new Error(`Failed to save grid: ${error.message}`);
       }
       gridId = gridState.id;
+      console.log('[SupabaseProvider] Grid updated successfully:', gridId);
     } else {
       // Create new grid - use the same logic as migrateLocalStorageGrid
       gridId = await this.migrateLocalStorageGrid(gridState);
